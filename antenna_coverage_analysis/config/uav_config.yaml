@@ -1,0 +1,64 @@
+# UAV Antenna Coverage Configuration
+# Matches MATLAB uav_antenna_coverage.m
+
+# System parameters
+system:
+  frequency_ghz: 9.0
+
+# Spiral antenna specifications
+spiral_antenna:
+  beamwidth_deg: 70           # 3dB beamwidth
+  gain_dbi: 2                 # Peak gain in dBi
+  front_to_back_db: 15        # Front-to-back ratio
+
+# Horn antenna (TX) specifications
+horn_antenna:
+  beamwidth_deg: 30
+  gain_dbi: 14
+  position: [0.854, 0.0, 0.0]   # 1 inch ahead of nose, centered
+  orientation: [0, 0]           # Pointing forward
+
+# UAV dimensions (meters)
+uav:
+  length: 2.0
+  width: 1.5
+
+# Antenna positions [x, y, z] in meters
+# Coordinate system: X=forward, Y=right, Z=up
+antenna_positions:
+  # Nose antennas (2)
+  - name: "Nose Left"
+    position: [0.8, -0.15, 0.0]
+    orientation: [-45, 0]       # 45 degrees left
+
+  - name: "Nose Right"
+    position: [0.8, 0.15, 0.0]
+    orientation: [45, 0]        # 45 degrees right
+
+  # Left fuselage antennas (4 in a line)
+  - name: "Left Fuse 1"
+    position: [0.1, -0.6, 0.0]
+    orientation: [-90, 0]       # Pointing left
+
+  - name: "Left Fuse 2"
+    position: [0.05, -0.6, 0.0]
+    orientation: [-90, 0]
+
+  - name: "Left Fuse 3"
+    position: [-0.05, -0.6, 0.0]
+    orientation: [-90, 0]
+
+  - name: "Left Fuse 4"
+    position: [-0.1, -0.6, 0.0]
+    orientation: [-90, 0]
+
+  # Right fuselage antenna (1)
+  - name: "Right Fuse"
+    position: [0.0, 0.6, 0.0]
+    orientation: [90, 0]        # Pointing right
+
+# Analysis parameters
+analysis:
+  azimuth_range: [-180, 180]
+  elevation_range: [-90, 90]
+  angular_resolution: 2         # degrees
