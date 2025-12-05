@@ -1,0 +1,248 @@
+# =============================================================================
+# RF CHAIN CONFIGURATIONS
+# =============================================================================
+# Defines RF receiver and transmitter chains with component specifications.
+# Supports multiple chain configurations for comparison.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GLOBAL DEFAULTS
+# -----------------------------------------------------------------------------
+defaults:
+  temperature_k: 290.0
+  reference_impedance_ohm: 50.0
+
+# -----------------------------------------------------------------------------
+# COMPONENT LIBRARY
+# -----------------------------------------------------------------------------
+# Reusable component definitions that can be referenced in chains
+components:
+
+  # --- CABLES ---
+  rg316_1m:
+    type: cable
+    name: "RG316 Coax 1m"
+    # Loss follows sqrt(f) model: loss = k * sqrt(f_ghz)
+    loss_points:
+      - freq_ghz: 1.0
+        loss_db: 0.5
+      - freq_ghz: 18.0
+        loss_db: 2.0
+
+  rg316_0p5m:
+    type: cable
+    name: "RG316 Coax 0.5m"
+    loss_points:
+      - freq_ghz: 1.0
+        loss_db: 0.25
+      - freq_ghz: 18.0
+        loss_db: 1.0
+
+  semi_rigid_6in:
+    type: cable
+    name: "Semi-Rigid 6in"
+    loss_points:
+      - freq_ghz: 1.0
+        loss_db: 0.1
+      - freq_ghz: 18.0
+        loss_db: 0.4
+
+  # --- AMPLIFIERS ---
+  lna_high_gain:
+    type: amplifier
+    name: "High-Gain LNA"
+    gain_db: 34.0
+    noise_figure_db: 2.0
+    p1db_dbm: 15.0
+    psat_dbm: 20.0
+
+  lna_low_noise:
+    type: amplifier
+    name: "Low-Noise LNA"
+    gain_db: 22.0
+    noise_figure_db: 1.2
+    p1db_dbm: 10.0
+    psat_dbm: 15.0
+
+  driver_amp:
+    type: amplifier
+    name: "Driver Amplifier"
+    gain_db: 15.0
+    noise_figure_db: 4.0
+    p1db_dbm: 20.0
+    psat_dbm: 25.0
+
+  power_amp:
+    type: amplifier
+    name: "Power Amplifier"
+    gain_db: 20.0
+    noise_figure_db: 6.0
+    p1db_dbm: 33.0
+    psat_dbm: 35.0
+
+  # --- ATTENUATORS ---
+  fixed_atten_3db:
+    type: attenuator
+    name: "3dB Fixed Attenuator"
+    attenuation_db: 3.0
+
+  fixed_atten_6db:
+    type: attenuator
+    name: "6dB Fixed Attenuator"
+    attenuation_db: 6.0
+
+  variable_atten:
+    type: attenuator
+    name: "Variable Attenuator"
+    attenuation_db: 10.0  # Default/nominal setting
+    min_atten_db: 0.5
+    max_atten_db: 31.5
+
+  # --- FILTERS ---
+  bandpass_2_18:
+    type: filter
+    name: "2-18 GHz Bandpass"
+    insertion_loss_db: 1.5
+    freq_min_ghz: 2.0
+    freq_max_ghz: 18.0
+
+  lowpass_20ghz:
+    type: filter
+    name: "20 GHz Lowpass"
+    insertion_loss_db: 0.8
+
+  # --- SWITCHES ---
+  spdt_switch:
+    type: switch
+    name: "SPDT Switch"
+    insertion_loss_db: 1.0
+    isolation_db: 50.0
+
+  sp4t_switch:
+    type: switch
+    name: "SP4T Switch"
+    insertion_loss_db: 1.5
+    isolation_db: 45.0
+
+  # --- ANTENNAS ---
+  spiral_antenna:
+    type: antenna
+    name: "Spiral Antenna"
+    gain_dbi: 2.0
+    freq_min_ghz: 2.0
+    freq_max_ghz: 18.0
+
+  horn_antenna:
+    type: antenna
+    name: "Horn Antenna"
+    gain_dbi: 14.0
+    freq_min_ghz: 8.0
+    freq_max_ghz: 12.0
+
+  # --- RFP PCB (integrated front-end) ---
+  rfp_pcb:
+    type: integrated
+    name: "RFP PCB Assembly"
+    gain_db: 28.0
+    noise_figure_db: 3.5
+    p1db_dbm: 12.0
+
+# -----------------------------------------------------------------------------
+# CHAIN DEFINITIONS
+# -----------------------------------------------------------------------------
+chains:
+
+  # --- RECEIVER CHAIN: Standard Configuration ---
+  rx_standard:
+    name: "Standard RX Chain"
+    description: "Receiver chain without RFP PCB"
+    type: receive
+    freq_range_ghz: [2.0, 18.0]
+
+    # Components in signal path order
+    components:
+      - ref: spiral_antenna
+        order: 1
+      - ref: rg316_1m
+        order: 2
+      - ref: bandpass_2_18
+        order: 3
+      - ref: lna_low_noise
+        order: 4
+      - ref: fixed_atten_3db
+        order: 5
+      - ref: driver_amp
+        order: 6
+      - ref: rg316_0p5m
+        order: 7
+
+  # --- RECEIVER CHAIN: With RFP PCB ---
+  rx_with_rfp:
+    name: "RX Chain with RFP PCB"
+    description: "Receiver chain using integrated RFP PCB front-end"
+    type: receive
+    freq_range_ghz: [2.0, 18.0]
+
+    components:
+      - ref: spiral_antenna
+        order: 1
+      - ref: semi_rigid_6in
+        order: 2
+      - ref: rfp_pcb
+        order: 3
+      - ref: rg316_0p5m
+        order: 4
+
+  # --- TRANSMITTER CHAIN ---
+  tx_standard:
+    name: "Standard TX Chain"
+    description: "Transmitter chain for ESM/EA applications"
+    type: transmit
+    freq_range_ghz: [8.0, 12.0]
+    source_power_dbm: 0.0
+
+    components:
+      - ref: rg316_0p5m
+        order: 1
+      - ref: driver_amp
+        order: 2
+      - ref: fixed_atten_3db
+        order: 3
+      - ref: power_amp
+        order: 4
+      - ref: semi_rigid_6in
+        order: 5
+      - ref: horn_antenna
+        order: 6
+
+  # --- MINIMAL RECEIVE CHAIN (for sensitivity comparison) ---
+  rx_minimal:
+    name: "Minimal RX Chain"
+    description: "Direct connection with single LNA"
+    type: receive
+    freq_range_ghz: [2.0, 18.0]
+
+    components:
+      - ref: spiral_antenna
+        order: 1
+      - ref: semi_rigid_6in
+        order: 2
+      - ref: lna_high_gain
+        order: 3
+
+# -----------------------------------------------------------------------------
+# ANALYSIS SETTINGS
+# -----------------------------------------------------------------------------
+analysis:
+  frequency_points: 200
+  temperature_k: 290.0
+
+  # Sensitivity calculation parameters
+  snr_required_db: 10.0
+  bandwidth_hz: 20.0e6
+
+  # Power sweep for dynamic range analysis
+  input_power_sweep_dbm: [-80, 0]
+
+  # ADC damage threshold (for RX chains)
+  adc_damage_level_dbm: 10.0
