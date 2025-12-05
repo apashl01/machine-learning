@@ -281,6 +281,26 @@ def _safe_log10(x: float) -> float:
     return math.log10(x)
 
 
+def _to_float(value, default: float = 0.0) -> float:
+    """Convert value to float, handling strings with scientific notation."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _to_int(value, default: int = 0) -> int:
+    """Convert value to int."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
 def _nested_get(data: dict, keys: List[str], default: Any = None) -> Any:
     """Get nested dictionary value safely."""
     for key in keys:
@@ -305,15 +325,15 @@ def _parse_receiver_config(data: dict) -> ReceiverConfig:
     """Parse receiver configuration from dict."""
     antenna_data = data.get('antenna', {})
     return ReceiverConfig(
-        freq_min_hz=data.get('freq_min_hz', 2.0e9),
-        freq_max_hz=data.get('freq_max_hz', 18.0e9),
+        freq_min_hz=_to_float(data.get('freq_min_hz'), 2.0e9),
+        freq_max_hz=_to_float(data.get('freq_max_hz'), 18.0e9),
         antenna=_parse_antenna_config(antenna_data),
-        noise_figure_db=data.get('noise_figure_db', 6.0),
-        bandwidth_hz=data.get('bandwidth_hz', 20.0e6),
-        system_losses_db=data.get('system_losses_db', 3.0),
-        snr_threshold_db=data.get('snr_threshold_db', 10.0),
-        tune_time_us=data.get('tune_time_us', 50.0),
-        settling_time_us=data.get('settling_time_us', 10.0)
+        noise_figure_db=_to_float(data.get('noise_figure_db'), 6.0),
+        bandwidth_hz=_to_float(data.get('bandwidth_hz'), 20.0e6),
+        system_losses_db=_to_float(data.get('system_losses_db'), 3.0),
+        snr_threshold_db=_to_float(data.get('snr_threshold_db'), 10.0),
+        tune_time_us=_to_float(data.get('tune_time_us'), 50.0),
+        settling_time_us=_to_float(data.get('settling_time_us'), 10.0)
     )
 
 
@@ -321,8 +341,8 @@ def _parse_platform_config(data: dict) -> PlatformConfig:
     """Parse platform configuration from dict."""
     return PlatformConfig(
         name=data.get('name', 'UAV Platform'),
-        altitude_m=data.get('altitude_m', 5000.0),
-        speed_mps=data.get('speed_mps', 100.0),
+        altitude_m=_to_float(data.get('altitude_m'), 5000.0),
+        speed_mps=_to_float(data.get('speed_mps'), 100.0),
         antenna_positions=data.get('antenna_positions', [])
     )
 
@@ -330,7 +350,7 @@ def _parse_platform_config(data: dict) -> PlatformConfig:
 def _parse_environment_config(data: dict) -> EnvironmentConfig:
     """Parse environment configuration from dict."""
     return EnvironmentConfig(
-        temperature_k=data.get('temperature_k', 290.0),
+        temperature_k=_to_float(data.get('temperature_k'), 290.0),
         propagation_model=data.get('propagation_model', 'free_space'),
         include_atmospheric_loss=data.get('include_atmospheric_loss', False)
     )
@@ -339,9 +359,9 @@ def _parse_environment_config(data: dict) -> EnvironmentConfig:
 def _parse_sidelobe_config(data: dict) -> SidelobeConfig:
     """Parse sidelobe configuration from dict."""
     return SidelobeConfig(
-        main_beam_offset_db=data.get('main_beam_offset_db', 0.0),
-        first_sidelobe_db=data.get('first_sidelobe_db', -20.0),
-        back_lobe_db=data.get('back_lobe_db', -30.0)
+        main_beam_offset_db=_to_float(data.get('main_beam_offset_db'), 0.0),
+        first_sidelobe_db=_to_float(data.get('first_sidelobe_db'), -20.0),
+        back_lobe_db=_to_float(data.get('back_lobe_db'), -30.0)
     )
 
 
@@ -349,11 +369,11 @@ def _parse_analysis_config(data: dict) -> AnalysisConfig:
     """Parse analysis configuration from dict."""
     sidelobe_data = data.get('sidelobe_levels', {})
     return AnalysisConfig(
-        required_detection_range_m=data.get('required_detection_range_m', 100000.0),
+        required_detection_range_m=_to_float(data.get('required_detection_range_m'), 100000.0),
         sidelobe_levels=_parse_sidelobe_config(sidelobe_data),
-        default_scan_positions=data.get('default_scan_positions', 8),
-        dwell_margin_factor=data.get('dwell_margin_factor', 1.5),
-        sidelobe_check_interval_s=data.get('sidelobe_check_interval_s', 60.0),
+        default_scan_positions=_to_int(data.get('default_scan_positions'), 8),
+        dwell_margin_factor=_to_float(data.get('dwell_margin_factor'), 1.5),
+        sidelobe_check_interval_s=_to_float(data.get('sidelobe_check_interval_s'), 60.0),
         verbose=data.get('verbose', True),
         debug_output=data.get('debug_output', True),
         generate_plots=data.get('generate_plots', True)
@@ -391,23 +411,28 @@ def _parse_threat(threat_id: str, data: dict, defaults: dict) -> Threat:
     # Merge defaults with threat-specific data
     merged = {**defaults, **data}
 
+    # Handle required_detection_range_m which can be None
+    req_range = merged.get('required_detection_range_m')
+    if req_range is not None:
+        req_range = _to_float(req_range, None)
+
     return Threat(
         id=threat_id,
         name=merged.get('name', threat_id),
         category=merged.get('category', 'unknown'),
-        priority=merged.get('priority', 3),
-        frequency_hz=merged.get('frequency_hz', 10.0e9),
-        peak_power_w=merged.get('peak_power_w', 100000.0),
-        antenna_gain_dbi=merged.get('antenna_gain_dbi', 30.0),
-        first_sidelobe_db=merged.get('first_sidelobe_db', -20.0),
-        back_lobe_db=merged.get('back_lobe_db', -30.0),
-        pri_us=merged.get('pri_us', 1000.0),
-        pulse_width_us=merged.get('pulse_width_us', 1.0),
-        duty_cycle=merged.get('duty_cycle', 0.001),
+        priority=_to_int(merged.get('priority'), 3),
+        frequency_hz=_to_float(merged.get('frequency_hz'), 10.0e9),
+        peak_power_w=_to_float(merged.get('peak_power_w'), 100000.0),
+        antenna_gain_dbi=_to_float(merged.get('antenna_gain_dbi'), 30.0),
+        first_sidelobe_db=_to_float(merged.get('first_sidelobe_db'), -20.0),
+        back_lobe_db=_to_float(merged.get('back_lobe_db'), -30.0),
+        pri_us=_to_float(merged.get('pri_us'), 1000.0),
+        pulse_width_us=_to_float(merged.get('pulse_width_us'), 1.0),
+        duty_cycle=_to_float(merged.get('duty_cycle'), 0.001),
         scan_type=merged.get('scan_type', 'rotating'),
-        scan_period_s=merged.get('scan_period_s', 5.0),
-        scan_sector_deg=merged.get('scan_sector_deg', 360.0),
-        required_detection_range_m=merged.get('required_detection_range_m'),
+        scan_period_s=_to_float(merged.get('scan_period_s'), 5.0),
+        scan_sector_deg=_to_float(merged.get('scan_sector_deg'), 360.0),
+        required_detection_range_m=req_range,
         notes=merged.get('notes', ''),
         polarization=merged.get('polarization', 'horizontal')
     )
