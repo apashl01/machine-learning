@@ -1,9 +1,23 @@
 """
-RF Chain Core Analysis Module
-
-Provides cascaded RF chain analysis calculations.
+RF Chain Analysis Core Module
 """
 
-from .analyzer import RFChainAnalyzer, CascadeResult, PowerPoint
+from .analyzer import (
+    analyze_rf_chain,
+    RFChainAnalyzer,
+    ChainAnalysisResults,
+    MidFreqSummary,
+    ComponentContribution,
+    print_results_summary,
+    print_gain_breakdown_table
+)
 
-__all__ = ['RFChainAnalyzer', 'CascadeResult', 'PowerPoint']
+__all__ = [
+    'analyze_rf_chain',
+    'RFChainAnalyzer',
+    'ChainAnalysisResults',
+    'MidFreqSummary',
+    'ComponentContribution',
+    'print_results_summary',
+    'print_gain_breakdown_table'
+]

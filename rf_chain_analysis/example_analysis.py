@@ -2,233 +2,236 @@
 """
 RF Chain Analysis Example
 
-Demonstrates complete RF chain cascade analysis including:
-- Cascaded gain and noise figure calculations
-- Sensitivity and dynamic range analysis
-- Component-by-component breakdown
-- Multi-chain comparison
-- Frequency response analysis
+Demonstrates RF chain analysis with cascaded components.
+Shows transmit mode with power tracking and saturation checking.
+
+Matches MATLAB example_rf_chain_analysis.m functionality.
 """
 
 import sys
 from pathlib import Path
+import numpy as np
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import matplotlib.pyplot as plt
 
-from rf_chain_analysis import load_rf_chain_config, RFChainAnalyzer
-from rf_chain_analysis.core.analyzer import compare_chains, calculate_noise_temperature
-from rf_chain_analysis.visualization import (
-    plot_cascade_breakdown,
-    plot_frequency_response,
-    plot_power_tracking,
-    plot_chain_comparison,
-    plot_dynamic_range
+from rf_chain_analysis import (
+    load_chain_config,
+    analyze_rf_chain,
+    print_results_summary,
+    print_gain_breakdown_table
 )
 
 
 def main():
-    """Run RF chain analysis example."""
+    """Run RF chain analysis example matching MATLAB."""
 
-    print("=" * 70)
-    print("RF CHAIN CASCADE ANALYSIS")
-    print("=" * 70)
+    # Load chain configuration
+    chain = load_chain_config()
 
-    # Load configuration
-    print("\n[1] Loading RF Chain Configuration...")
-    config = load_rf_chain_config()
+    print("=== RF Chain Configuration ===")
+    print(f"Chain Type: {chain.chain_type.value}")
+    print(f"Chain: {chain.description}")
+    print(f"Frequency Range: {chain.freq_range_ghz[0]:.1f} - {chain.freq_range_ghz[1]:.1f} GHz")
 
-    print(f"    Component Library: {len(config.component_library)} components")
-    for comp_id in config.component_library.list_components():
-        comp = config.component_library.get(comp_id)
-        print(f"      - {comp}")
+    if chain.is_transmit:
+        print(f"Source Power: {chain.source_power_dbm:.1f} dBm")
+    print()
 
-    print(f"\n    Chains defined: {len(config.chains)}")
-    for chain_id in config.list_chains():
-        chain = config.get_chain(chain_id)
-        print(f"      - {chain.name} ({chain.chain_type.value})")
+    # Display components in order
+    print("Component Order:")
+    for comp in chain.get_components_ordered():
+        print(f"  {comp.order}. {comp.name} ({comp.type.value})")
+    print()
 
-    # Create analyzer
-    print("\n[2] Creating Analyzer...")
-    analyzer = RFChainAnalyzer(config.analysis)
-    print(f"    Bandwidth: {config.analysis.bandwidth_hz/1e6:.1f} MHz")
-    print(f"    SNR Required: {config.analysis.snr_required_db:.1f} dB")
-    print(f"    Temperature: {config.analysis.temperature_k:.1f} K")
+    # Analyze chain
+    results = analyze_rf_chain(chain)
 
-    # Analyze receive chains
-    print("\n" + "=" * 70)
-    print("RECEIVE CHAIN ANALYSIS")
-    print("=" * 70)
-
-    rx_chains = config.get_receive_chains()
-    analysis_freq = 10.0  # GHz - mid-band analysis
-
-    for chain in rx_chains:
-        print(f"\n--- {chain.name} ---")
-        print(f"    Description: {chain.description}")
-        print(f"    Frequency Range: {chain.freq_range_ghz[0]}-{chain.freq_range_ghz[1]} GHz")
-
-        # Cascade analysis
-        result = analyzer.analyze_cascade(chain, analysis_freq)
-
-        # Print summary
-        print(analyzer.print_cascade_summary(result))
-
-        # Calculate noise temperature
-        noise_temp = calculate_noise_temperature(result.total_nf_db)
-        print(f"    Equivalent Noise Temperature: {noise_temp:.1f} K")
-
-    # Compare receive chains
-    if len(rx_chains) >= 2:
-        print("\n" + "=" * 70)
-        print("RECEIVE CHAIN COMPARISON")
-        print("=" * 70)
-
-        comparison = compare_chains(analyzer, rx_chains, analysis_freq)
-
-        print(f"\n{'Chain':<25} {'Gain(dB)':>10} {'NF(dB)':>10} {'Sens(dBm)':>12} {'DR(dB)':>10}")
-        print("-" * 70)
-
-        for chain_id, result in comparison.items():
-            print(f"{chain_id:<25} {result.total_gain_db:>10.2f} "
-                  f"{result.total_nf_db:>10.2f} {result.sensitivity_dbm:>12.2f} "
-                  f"{result.dynamic_range_db:>10.2f}")
-
-        # Identify best chain
-        best_sens = min(comparison.items(), key=lambda x: x[1].sensitivity_dbm)
-        best_dr = max(comparison.items(), key=lambda x: x[1].dynamic_range_db)
-        lowest_nf = min(comparison.items(), key=lambda x: x[1].total_nf_db)
-
-        print(f"\n    Best Sensitivity: {best_sens[0]} ({best_sens[1].sensitivity_dbm:.2f} dBm)")
-        print(f"    Best Dynamic Range: {best_dr[0]} ({best_dr[1].dynamic_range_db:.2f} dB)")
-        print(f"    Lowest Noise Figure: {lowest_nf[0]} ({lowest_nf[1].total_nf_db:.2f} dB)")
-
-    # Analyze transmit chains
-    tx_chains = config.get_transmit_chains()
-    if tx_chains:
-        print("\n" + "=" * 70)
-        print("TRANSMIT CHAIN ANALYSIS")
-        print("=" * 70)
-
-        for chain in tx_chains:
-            print(f"\n--- {chain.name} ---")
-            print(f"    Source Power: {chain.source_power_dbm:.1f} dBm")
-
-            tx_result = analyzer.analyze_tx_chain(chain, analysis_freq)
-
-            print(f"    Total Gain: {tx_result['total_gain_db']:.2f} dB")
-            print(f"    Output Power: {tx_result['output_power_dbm']:.2f} dBm")
-
-            if tx_result['any_compression']:
-                print("    WARNING: Compression detected in chain!")
-                for p in tx_result['power_points']:
-                    if p.is_compressed:
-                        print(f"      - {p.component_name}: {p.compression_db:.1f} dB compression")
-
-    # Power tracking example
-    print("\n" + "=" * 70)
-    print("POWER TRACKING EXAMPLE")
-    print("=" * 70)
-
-    if rx_chains:
-        test_chain = rx_chains[0]
-        test_powers = [-60, -40, -20, 0]  # dBm
-
-        print(f"\nTracking power through {test_chain.name}:")
-
-        for pin in test_powers:
-            power_points = analyzer.track_power(test_chain, analysis_freq, pin)
-
-            output_power = power_points[-1].output_power_dbm if power_points else pin
-            compressed = any(p.is_compressed for p in power_points)
-
-            status = "COMPRESSED" if compressed else "Linear"
-            print(f"    Input: {pin:>6.1f} dBm -> Output: {output_power:>7.1f} dBm [{status}]")
-
-    # Frequency response
-    print("\n" + "=" * 70)
-    print("FREQUENCY RESPONSE ANALYSIS")
-    print("=" * 70)
-
-    if rx_chains:
-        test_chain = rx_chains[0]
-        freq_analysis = analyzer.analyze_frequency_range(test_chain)
-
-        print(f"\n{test_chain.name} across {test_chain.freq_range_ghz[0]}-{test_chain.freq_range_ghz[1]} GHz:")
-        print(f"    Gain Range: {freq_analysis.gains_db.min():.2f} to {freq_analysis.gains_db.max():.2f} dB")
-        print(f"    NF Range: {freq_analysis.noise_figures_db.min():.2f} to {freq_analysis.noise_figures_db.max():.2f} dB")
-        print(f"    Sensitivity Range: {freq_analysis.sensitivities_dbm.max():.2f} to {freq_analysis.sensitivities_dbm.min():.2f} dBm")
+    # Display mid-frequency results
+    print(print_results_summary(results))
+    print()
+    print(print_gain_breakdown_table(results))
+    print()
 
     # Generate plots
-    print("\n" + "=" * 70)
-    print("GENERATING PLOTS")
-    print("=" * 70)
+    generate_plots(results, chain)
 
-    try:
-        figures = []
+    print("\nAnalysis complete!")
 
-        # Cascade breakdown for first RX chain
-        if rx_chains:
-            result = analyzer.analyze_cascade(rx_chains[0], analysis_freq)
-            fig1 = plot_cascade_breakdown(result, f"{rx_chains[0].name} Cascade")
-            figures.append(("cascade_breakdown", fig1))
-            print("    [+] Cascade breakdown plot")
 
-            # Frequency response
-            freq_analysis = analyzer.analyze_frequency_range(rx_chains[0])
-            fig2 = plot_frequency_response(freq_analysis, rx_chains[0].name)
-            figures.append(("frequency_response", fig2))
-            print("    [+] Frequency response plot")
+def generate_plots(results, chain):
+    """Generate analysis plots matching MATLAB example."""
 
-            # Power tracking
-            power_points = analyzer.track_power(rx_chains[0], analysis_freq, -30)
-            fig3 = plot_power_tracking(power_points, -30, rx_chains[0].name)
-            figures.append(("power_tracking", fig3))
-            print("    [+] Power tracking plot")
+    fig, axes = plt.subplots(2, 3, figsize=(14, 9))
 
-            # Dynamic range visualization
-            fig4 = plot_dynamic_range(result, rx_chains[0].name)
-            figures.append(("dynamic_range", fig4))
-            print("    [+] Dynamic range plot")
+    n_comp = results.n_components
+    mid_idx = np.argmin(np.abs(results.freq_ghz - results.mid_freq_summary.frequency_ghz))
+    colors = plt.cm.tab10(np.linspace(0, 1, n_comp))
 
-        # Chain comparison
-        if len(rx_chains) >= 2:
-            comparison = compare_chains(analyzer, rx_chains, analysis_freq)
-            fig5 = plot_chain_comparison(comparison, analysis_freq)
-            figures.append(("chain_comparison", fig5))
-            print("    [+] Chain comparison plot")
+    # Plot 1: Individual component gains vs frequency
+    ax1 = axes[0, 0]
+    for i in range(n_comp):
+        ax1.plot(results.freq_ghz, results.component_gains[i, :],
+                 '-', linewidth=2, color=colors[i], label=results.component_names[i])
+    ax1.axhline(0, color='k', linestyle='--', linewidth=1)
+    ax1.set_xlabel('Frequency (GHz)')
+    ax1.set_ylabel('Gain (dB)')
+    ax1.set_title('Individual Component Gain vs Frequency')
+    ax1.legend(loc='best', fontsize=8)
+    ax1.grid(True, alpha=0.3)
 
-        # Save plots
-        output_dir = Path(__file__).parent / "output"
-        output_dir.mkdir(exist_ok=True)
+    # Plot 2: Cascaded total gain vs frequency
+    ax2 = axes[0, 1]
+    ax2.plot(results.freq_ghz, results.total_gain_db, 'b-', linewidth=2.5)
+    ax2.plot(results.mid_freq_summary.frequency_ghz, results.mid_freq_summary.total_gain_db,
+             'ro', markersize=10, linewidth=2,
+             label=f'Mid-Freq: {results.mid_freq_summary.total_gain_db:.2f} dB')
+    ax2.axhline(0, color='k', linestyle='--', linewidth=1)
+    ax2.set_xlabel('Frequency (GHz)')
+    ax2.set_ylabel('Total Gain (dB)')
+    ax2.set_title('Cascaded Total Gain vs Frequency')
+    ax2.legend(loc='best')
+    ax2.grid(True, alpha=0.3)
 
-        for name, fig in figures:
-            filepath = output_dir / f"rf_chain_{name}.png"
-            fig.savefig(filepath, dpi=150, bbox_inches='tight')
-            print(f"    Saved: {filepath}")
+    # Plot 3: TX output power OR RX damage threshold OR cascaded NF
+    ax3 = axes[0, 2]
+    if results.has_power_tracking:
+        ax3.plot(results.freq_ghz, results.final_output_power_dbm, 'r-', linewidth=2.5,
+                 label='Output Power')
+        ax3.axhline(chain.source_power_dbm, color='k', linestyle='--', linewidth=1.5,
+                    label='Source Power')
+        ax3.set_xlabel('Frequency (GHz)')
+        ax3.set_ylabel('Power (dBm)')
+        ax3.set_title('Output Power vs Frequency')
+        ax3.legend(loc='best')
+        ax3.grid(True, alpha=0.3)
+    elif results.has_rx_sweep:
+        ax3.plot(results.freq_ghz, results.min_damage_threshold_dbm, 'b-', linewidth=2.5,
+                 label='Max Safe Input Power')
+        ax3.axhline(results.damage_level_dbm, color='r', linestyle='--', linewidth=2,
+                    label=f'Damage Level: {results.damage_level_dbm:.1f} dBm')
+        ax3.set_xlabel('Frequency (GHz)')
+        ax3.set_ylabel('Input Power (dBm)')
+        ax3.set_title('Maximum Safe Input Power vs Frequency')
+        ax3.legend(loc='best')
+        ax3.grid(True, alpha=0.3)
+    elif results.has_nf_data:
+        ax3.plot(results.freq_ghz, results.cascaded_nf_db, 'r-', linewidth=2.5)
+        if results.mid_freq_summary.cascaded_nf_db is not None:
+            ax3.plot(results.mid_freq_summary.frequency_ghz, results.mid_freq_summary.cascaded_nf_db,
+                     'bo', markersize=10, linewidth=2,
+                     label=f'Mid-Freq: {results.mid_freq_summary.cascaded_nf_db:.2f} dB')
+        ax3.set_xlabel('Frequency (GHz)')
+        ax3.set_ylabel('Cascaded NF (dB)')
+        ax3.set_title('Cascaded Noise Figure vs Frequency')
+        ax3.legend(loc='best')
+        ax3.grid(True, alpha=0.3)
+    else:
+        ax3.text(0.5, 0.5, 'No NF data available', ha='center', va='center',
+                 fontsize=14, color='r', transform=ax3.transAxes)
+        ax3.axis('off')
 
-        plt.show()
+    # Plot 4: Cumulative gain through chain at mid-frequency
+    ax4 = axes[1, 0]
+    cumulative_gain = np.cumsum(results.component_gains[:, mid_idx])
+    bars = ax4.bar(range(1, n_comp + 1), cumulative_gain, color=[0.3, 0.6, 0.9])
+    ax4.set_xticks(range(1, n_comp + 1))
+    ax4.set_xticklabels(results.component_names, rotation=45, ha='right')
+    ax4.axhline(0, color='k', linestyle='--', linewidth=1.5)
+    ax4.set_ylabel('Cumulative Gain (dB)')
+    ax4.set_title(f'Cumulative Gain Through Chain @ {results.mid_freq_summary.frequency_ghz:.2f} GHz')
+    ax4.grid(True, alpha=0.3, axis='y')
 
-    except Exception as e:
-        print(f"    Plot generation error: {e}")
-        print("    (Plots may not display in non-GUI environment)")
+    # Add value labels on bars
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax4.text(bar.get_x() + bar.get_width()/2., height,
+                 f'{cumulative_gain[i]:.1f}',
+                 ha='center', va='bottom', fontweight='bold', fontsize=8)
 
-    # Summary
-    print("\n" + "=" * 70)
-    print("ANALYSIS COMPLETE")
-    print("=" * 70)
-    print("\nKey findings:")
+    # Plot 5: Power through each stage (TX or RX sweep)
+    ax5 = axes[1, 1]
+    if results.has_power_tracking:
+        power_after_each = results.power_through_chain_dbm[:, mid_idx]
+        ax5.stairs(power_after_each[:-1], range(n_comp + 1), baseline=None,
+                   color='b', linewidth=2)
+        ax5.plot(range(n_comp + 1), power_after_each, 'ro', markersize=8, linewidth=2)
 
-    if rx_chains:
-        best_chain = min(rx_chains,
-                         key=lambda c: analyzer.analyze_cascade(c, analysis_freq).total_nf_db)
-        best_result = analyzer.analyze_cascade(best_chain, analysis_freq)
-        print(f"  - Best RX chain: {best_chain.name}")
-        print(f"    - System NF: {best_result.total_nf_db:.2f} dB")
-        print(f"    - Sensitivity: {best_result.sensitivity_dbm:.2f} dBm")
-        print(f"    - Dynamic Range: {best_result.dynamic_range_db:.2f} dB")
+        # Mark saturated amplifiers
+        for i in range(n_comp):
+            if results.saturation_flags[i, mid_idx]:
+                ax5.plot(i + 1, power_after_each[i + 1], 'rx', markersize=15, linewidth=3)
+
+        labels = ['Source'] + results.component_names
+        ax5.set_xticks(range(n_comp + 1))
+        ax5.set_xticklabels(labels, rotation=45, ha='right')
+        ax5.set_ylabel('Power (dBm)')
+        ax5.set_title(f'Power Through Chain @ {results.mid_freq_summary.frequency_ghz:.2f} GHz')
+        ax5.grid(True, alpha=0.3)
+
+    elif results.has_rx_sweep:
+        power_at_thresh = results.mid_freq_summary.power_through_chain_at_threshold
+        n_stages = len(power_at_thresh) - 1
+
+        ax5.stairs(power_at_thresh[:-1], range(n_stages + 1), baseline=None,
+                   color='b', linewidth=2, label='Power Level')
+        ax5.plot(range(n_stages + 1), power_at_thresh, 'ro', markersize=8,
+                 linewidth=2, label='Stage Output')
+
+        # Mark damage at ADC input
+        ax5.plot(n_stages, power_at_thresh[-1], 'rx', markersize=15, linewidth=3,
+                 label='Damage Point')
+        ax5.plot(n_stages, results.damage_level_dbm, 'r^', markersize=10,
+                 markerfacecolor='r', label=f'Damage Threshold: {results.damage_level_dbm:.1f} dBm')
+
+        labels = ['Input'] + results.component_names + ['ADC']
+        ax5.set_xticks(range(n_stages + 1))
+        ax5.set_xticklabels(labels, rotation=45, ha='right')
+        ax5.set_ylabel('Power (dBm)')
+        ax5.set_title(f'Power Through Chain @ Max Safe Input ({results.mid_freq_summary.frequency_ghz:.2f} GHz)')
+        ax5.legend(loc='best', fontsize=8)
+        ax5.grid(True, alpha=0.3)
+    else:
+        ax5.axis('off')
+
+    # Plot 6: Output power in watts (TX) OR max safe input vs frequency (RX)
+    ax6 = axes[1, 2]
+    if results.has_power_tracking:
+        ax6.plot(results.freq_ghz, results.final_output_power_watts, 'r-', linewidth=2.5)
+        ax6.set_xlabel('Frequency (GHz)')
+        ax6.set_ylabel('Output Power (W)')
+        ax6.set_title('Output Power (Watts) vs Frequency')
+        ax6.grid(True, alpha=0.3)
+    elif results.has_rx_sweep:
+        ax6.plot(results.freq_ghz, results.min_damage_threshold_dbm, 'b-', linewidth=2.5,
+                 label='Max Safe Input Power')
+        ax6.axhline(results.damage_level_dbm, color='r', linestyle='--', linewidth=2,
+                    label=f'Damage Level: {results.damage_level_dbm:.1f} dBm')
+        ax6.plot(results.mid_freq_summary.frequency_ghz,
+                 results.mid_freq_summary.min_safe_input_power_dbm,
+                 'ro', markersize=10, linewidth=2,
+                 label=f'Mid-Freq: {results.mid_freq_summary.min_safe_input_power_dbm:.1f} dBm')
+        ax6.set_xlabel('Frequency (GHz)')
+        ax6.set_ylabel('Input Power (dBm)')
+        ax6.set_title('Maximum Safe Input Power vs Frequency')
+        ax6.legend(loc='best')
+        ax6.grid(True, alpha=0.3)
+    else:
+        ax6.axis('off')
+
+    fig.suptitle(f'RF Chain Analysis: {chain.description}', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+
+    # Save plot
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(exist_ok=True)
+    filepath = output_dir / "rf_chain_analysis.png"
+    fig.savefig(filepath, dpi=150, bbox_inches='tight')
+    print(f"\nPlot saved to: {filepath}")
+
+    plt.show()
 
 
 if __name__ == "__main__":

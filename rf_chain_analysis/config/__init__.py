@@ -3,23 +3,27 @@ RF Chain Configuration Module
 """
 
 from .loader import (
-    load_rf_chain_config,
-    RFChainConfig,
-    ComponentLibrary,
+    load_chain_config,
+    load_rf_chain_config,  # Legacy alias
+    ChainConfig,
     Component,
-    RFChain,
+    CableComponent,
+    AmplifierComponent,
+    AttenuatorComponent,
+    AntennaComponent,
     ChainType,
-    ComponentType,
-    AnalysisSettings
+    ComponentType
 )
 
 __all__ = [
+    'load_chain_config',
     'load_rf_chain_config',
-    'RFChainConfig',
-    'ComponentLibrary',
+    'ChainConfig',
     'Component',
-    'RFChain',
+    'CableComponent',
+    'AmplifierComponent',
+    'AttenuatorComponent',
+    'AntennaComponent',
     'ChainType',
-    'ComponentType',
-    'AnalysisSettings'
+    'ComponentType'
 ]

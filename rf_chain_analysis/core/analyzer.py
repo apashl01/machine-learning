@@ -1,12 +1,12 @@
 """
 RF Chain Analyzer
 
-Cascaded analysis of RF receiver and transmitter chains including:
-- Cascaded gain calculation
+Cascaded analysis of RF receiver and transmitter chains.
+Matches MATLAB analyze_rf_chain.m functionality including:
+- Cascaded gain calculation across frequency
 - Cascaded noise figure (Friis formula)
-- Sensitivity calculation
-- Power tracking through chain
-- Dynamic range analysis
+- TX mode: Power tracking with saturation detection
+- RX mode: Damage threshold analysis
 """
 
 from dataclasses import dataclass, field
@@ -14,7 +14,10 @@ from typing import List, Optional, Dict, Any
 import math
 import numpy as np
 
-from ..config import RFChain, Component, AnalysisSettings, ChainType
+from ..config.loader import (
+    ChainConfig, Component, ComponentType,
+    CableComponent, AmplifierComponent, AttenuatorComponent, AntennaComponent
+)
 
 
 # =============================================================================
@@ -30,52 +33,82 @@ T0 = 290.0  # Reference temperature in Kelvin
 # =============================================================================
 
 @dataclass
-class PowerPoint:
-    """Power level at a point in the chain."""
-    component_name: str
-    order: int
-    input_power_dbm: float
-    output_power_dbm: float
+class ComponentContribution:
+    """Component performance at a specific frequency."""
+    name: str
     gain_db: float
-    cumulative_gain_db: float
-    is_compressed: bool = False
-    compression_db: float = 0.0
+    nf_db: Optional[float] = None
+    output_power_dbm: Optional[float] = None
+    output_power_watts: Optional[float] = None
+    saturated: bool = False
+    power_at_threshold_dbm: Optional[float] = None
 
 
 @dataclass
-class CascadeResult:
-    """Results of cascaded chain analysis at a single frequency."""
-    freq_ghz: float
-
-    # Cascaded parameters
+class MidFreqSummary:
+    """Performance summary at middle frequency."""
+    frequency_ghz: float
     total_gain_db: float
-    total_nf_db: float
+    cascaded_nf_db: Optional[float] = None
 
-    # Sensitivity
-    thermal_noise_floor_dbm: float
-    sensitivity_dbm: float
+    # TX mode
+    input_power_dbm: Optional[float] = None
+    output_power_dbm: Optional[float] = None
+    output_power_watts: Optional[float] = None
+    saturated_amplifiers: List[str] = field(default_factory=list)
 
-    # Dynamic range
-    min_input_dbm: float  # Sensitivity
-    max_input_dbm: float  # Input at 1dB compression
-    dynamic_range_db: float
+    # RX mode
+    damage_level_dbm: Optional[float] = None
+    min_safe_input_power_dbm: Optional[float] = None
+    adc_input_power_at_threshold_dbm: Optional[float] = None
+    power_through_chain_at_threshold: Optional[np.ndarray] = None
 
-    # Component-by-component breakdown
-    component_gains: List[float] = field(default_factory=list)
-    component_nfs: List[float] = field(default_factory=list)
-    cumulative_gains: List[float] = field(default_factory=list)
-    cumulative_nfs: List[float] = field(default_factory=list)
-    component_names: List[str] = field(default_factory=list)
+    # Component breakdown
+    component_contributions: Dict[str, ComponentContribution] = field(default_factory=dict)
 
 
 @dataclass
-class FrequencyAnalysis:
-    """Analysis results across frequency range."""
-    frequencies_ghz: np.ndarray
-    gains_db: np.ndarray
-    noise_figures_db: np.ndarray
-    sensitivities_dbm: np.ndarray
-    dynamic_ranges_db: np.ndarray
+class ChainAnalysisResults:
+    """
+    Complete RF chain analysis results.
+
+    Matches MATLAB analyze_rf_chain.m output structure.
+    """
+    # Frequency data
+    freq_ghz: np.ndarray
+    n_freq: int
+    n_components: int
+
+    # Cascaded results vs frequency
+    total_gain_db: np.ndarray
+    cascaded_nf_db: np.ndarray
+    component_gains: np.ndarray  # [n_components, n_freq]
+    component_nfs: np.ndarray    # [n_components, n_freq]
+    component_names: List[str]
+
+    # Summary at mid-frequency
+    mid_freq_summary: MidFreqSummary
+
+    # Flags
+    has_nf_data: bool
+    is_transmit: bool
+    has_power_tracking: bool
+    has_rx_sweep: bool
+
+    # TX mode results (if applicable)
+    power_through_chain_dbm: Optional[np.ndarray] = None  # [n_components+1, n_freq]
+    power_through_chain_watts: Optional[np.ndarray] = None
+    final_output_power_dbm: Optional[np.ndarray] = None
+    final_output_power_watts: Optional[np.ndarray] = None
+    saturation_flags: Optional[np.ndarray] = None  # [n_components, n_freq]
+
+    # RX mode results (if applicable)
+    damage_level_dbm: Optional[float] = None
+    min_damage_threshold_dbm: Optional[np.ndarray] = None  # vs frequency
+    input_power_range_dbm: Optional[List[float]] = None
+
+    # Reference to original config
+    chain_config: Optional[ChainConfig] = None
 
 
 # =============================================================================
@@ -86,359 +119,340 @@ class RFChainAnalyzer:
     """
     Analyzer for cascaded RF chain performance.
 
-    Implements Friis formula for cascaded noise figure and tracks
-    power levels through the chain for compression analysis.
+    Matches MATLAB analyze_rf_chain.m functionality.
     """
 
-    def __init__(self, settings: Optional[AnalysisSettings] = None):
+    def __init__(self, n_freq_points: int = 200):
         """
-        Initialize analyzer with settings.
+        Initialize analyzer.
 
         Args:
-            settings: Analysis configuration. Uses defaults if None.
+            n_freq_points: Number of frequency points for analysis.
         """
-        self.settings = settings or AnalysisSettings()
+        self.n_freq_points = n_freq_points
 
-    def analyze_cascade(self, chain: RFChain, freq_ghz: float) -> CascadeResult:
+    def analyze(self, chain: ChainConfig) -> ChainAnalysisResults:
         """
-        Perform cascaded analysis at a single frequency.
+        Analyze RF chain across frequency range.
+
+        Matches MATLAB analyze_rf_chain(chain_config) function.
 
         Args:
-            chain: RF chain to analyze.
-            freq_ghz: Analysis frequency in GHz.
+            chain: ChainConfig to analyze.
 
         Returns:
-            CascadeResult with all cascade calculations.
+            ChainAnalysisResults with all analysis data.
         """
+        # Get frequency range and create vector
+        freq_min = chain.get_freq_min()
+        freq_max = chain.get_freq_max()
+        freq_ghz = np.linspace(freq_min, freq_max, self.n_freq_points)
+        n_freq = len(freq_ghz)
+
+        # Get ordered components
         components = chain.get_components_ordered()
+        n_components = len(components)
+        component_names = [c.name for c in components]
 
-        if not components:
-            return self._empty_result(freq_ghz)
+        # Pre-allocate arrays
+        component_gains = np.zeros((n_components, n_freq))
+        component_nfs = np.full((n_components, n_freq), np.nan)
+        component_psat = np.full(n_components, np.nan)
 
-        # Initialize arrays
-        n = len(components)
-        gains_db = np.zeros(n)
-        nfs_db = np.zeros(n)
-        cumulative_gains_db = np.zeros(n)
-        cumulative_nfs_db = np.zeros(n)
-        names = []
+        # Compute performance for each component at each frequency
+        for idx, comp in enumerate(components):
+            for f_idx, freq in enumerate(freq_ghz):
+                # Get gain
+                if isinstance(comp, AttenuatorComponent):
+                    gain = comp.get_gain_at_freq(freq, freq_min, freq_max)
+                    nf = comp.get_nf_at_freq(freq, freq_min, freq_max)
+                else:
+                    gain = comp.get_gain_at_freq(freq)
+                    nf = comp.get_nf_at_freq(freq)
 
-        # Calculate individual component parameters
-        for i, comp in enumerate(components):
-            gains_db[i] = comp.get_gain_at_freq(freq_ghz)
-            nfs_db[i] = comp.get_nf_at_freq(freq_ghz)
-            names.append(comp.name)
+                component_gains[idx, f_idx] = gain
 
-        # Calculate cumulative gain (simple sum in dB)
-        cumulative_gains_db[0] = gains_db[0]
-        for i in range(1, n):
-            cumulative_gains_db[i] = cumulative_gains_db[i-1] + gains_db[i]
+                # Get noise figure
+                if nf is not None:
+                    component_nfs[idx, f_idx] = nf
 
-        # Calculate cumulative noise figure using Friis formula
-        # NF_cascade = NF1 + (NF2-1)/G1 + (NF3-1)/(G1*G2) + ...
-        # Working in linear domain for noise factors
-        cumulative_nfs_db[0] = nfs_db[0]
+            # Get Psat for amplifiers
+            if isinstance(comp, AmplifierComponent) and comp.psat_dbm is not None:
+                component_psat[idx] = comp.psat_dbm
 
-        for i in range(1, n):
-            # Convert to linear
-            f_cascade = self._db_to_linear(cumulative_nfs_db[i-1])
-            f_new = self._db_to_linear(nfs_db[i])
-            g_prev = self._db_to_linear(cumulative_gains_db[i-1])
+        # Compute cascaded total gain
+        total_gain_db = np.sum(component_gains, axis=0)
 
-            # Friis: F_new_cascade = F_old_cascade + (F_component - 1) / G_preceding
-            if g_prev > 0:
-                f_cascade_new = f_cascade + (f_new - 1) / g_prev
-            else:
-                # If gain is very low/negative, NF degrades significantly
-                f_cascade_new = f_cascade + (f_new - 1) * 1e6
+        # Calculate mid-frequency index
+        mid_freq_ghz = (freq_min + freq_max) / 2
+        mid_idx = np.argmin(np.abs(freq_ghz - mid_freq_ghz))
 
-            cumulative_nfs_db[i] = self._linear_to_db(max(f_cascade_new, 1.0))
+        # Determine chain type and analysis mode
+        is_transmit = chain.is_transmit
+        do_rx_power_sweep = (not is_transmit and chain.has_damage_threshold)
 
-        # Total cascade results
-        total_gain_db = cumulative_gains_db[-1]
-        total_nf_db = cumulative_nfs_db[-1]
+        # TX mode: Track power through chain with saturation checking
+        has_power_tracking = False
+        power_through_chain_dbm = None
+        power_through_chain_watts = None
+        final_output_power_dbm = None
+        final_output_power_watts = None
+        saturation_flags = None
 
-        # Thermal noise floor
-        # N = kTB in dBm = 10*log10(kTB) + 30
-        bandwidth_hz = self.settings.bandwidth_hz
-        temp_k = self.settings.temperature_k
-        thermal_noise_w = BOLTZMANN_K * temp_k * bandwidth_hz
-        thermal_noise_dbm = 10 * math.log10(thermal_noise_w) + 30
+        if is_transmit:
+            has_power_tracking = True
+            power_through_chain_dbm = np.zeros((n_components + 1, n_freq))
+            saturation_flags = np.zeros((n_components, n_freq), dtype=bool)
 
-        # Sensitivity = Noise floor + NF + SNR_required
-        sensitivity_dbm = thermal_noise_dbm + total_nf_db + self.settings.snr_required_db
+            # Initial power (source)
+            power_through_chain_dbm[0, :] = chain.source_power_dbm
 
-        # Find system input compression point
-        # Work backwards from each component's P1dB
-        max_input_dbm = self._calculate_max_input(chain, freq_ghz)
+            # Track power through each component
+            for comp_idx, comp in enumerate(components):
+                power_after = power_through_chain_dbm[comp_idx, :] + component_gains[comp_idx, :]
 
-        # Dynamic range
-        dynamic_range_db = max_input_dbm - sensitivity_dbm
+                # Check for amplifier saturation
+                if isinstance(comp, AmplifierComponent) and not np.isnan(component_psat[comp_idx]):
+                    saturated = power_after > component_psat[comp_idx]
+                    saturation_flags[comp_idx, saturated] = True
+                    power_after[saturated] = component_psat[comp_idx]
 
-        return CascadeResult(
+                power_through_chain_dbm[comp_idx + 1, :] = power_after
+
+            final_output_power_dbm = power_through_chain_dbm[-1, :]
+            final_output_power_watts = self._dbm_to_watts(final_output_power_dbm)
+            power_through_chain_watts = self._dbm_to_watts(power_through_chain_dbm)
+
+        # RX mode: Damage threshold analysis
+        has_rx_sweep = False
+        damage_level_dbm = None
+        min_damage_threshold_dbm = None
+        power_through_chain_at_threshold = None
+
+        if do_rx_power_sweep:
+            has_rx_sweep = True
+            damage_level_dbm = chain.damage_level_dbm
+
+            # For each frequency, find max input power before output exceeds damage level
+            min_damage_threshold_dbm = np.zeros(n_freq)
+
+            for f_idx in range(n_freq):
+                # Total gain through entire chain
+                total_chain_gain = np.sum(component_gains[:, f_idx])
+                # Max safe input = damage level - total gain
+                min_damage_threshold_dbm[f_idx] = damage_level_dbm - total_chain_gain
+
+            # Compute power through chain at mid-frequency with max safe input
+            mid_safe_power = min_damage_threshold_dbm[mid_idx]
+            power_through_chain_at_threshold = np.zeros(n_components + 2)  # +2 for input and ADC
+            power_through_chain_at_threshold[0] = mid_safe_power
+
+            for comp_idx in range(n_components):
+                power_through_chain_at_threshold[comp_idx + 1] = \
+                    power_through_chain_at_threshold[comp_idx] + component_gains[comp_idx, mid_idx]
+
+            # ADC input = output of last component
+            power_through_chain_at_threshold[-1] = power_through_chain_at_threshold[n_components]
+
+        # Compute cascaded noise figure using Friis formula
+        cascaded_nf_db, has_nf_data = self._compute_cascaded_nf(
+            component_gains, component_nfs, n_freq, n_components
+        )
+
+        # Build mid-frequency summary
+        mid_freq_summary = self._build_mid_freq_summary(
             freq_ghz=freq_ghz,
+            mid_idx=mid_idx,
             total_gain_db=total_gain_db,
-            total_nf_db=total_nf_db,
-            thermal_noise_floor_dbm=thermal_noise_dbm,
-            sensitivity_dbm=sensitivity_dbm,
-            min_input_dbm=sensitivity_dbm,
-            max_input_dbm=max_input_dbm,
-            dynamic_range_db=dynamic_range_db,
-            component_gains=gains_db.tolist(),
-            component_nfs=nfs_db.tolist(),
-            cumulative_gains=cumulative_gains_db.tolist(),
-            cumulative_nfs=cumulative_nfs_db.tolist(),
-            component_names=names
+            cascaded_nf_db=cascaded_nf_db,
+            has_nf_data=has_nf_data,
+            component_gains=component_gains,
+            component_nfs=component_nfs,
+            component_names=component_names,
+            components=components,
+            chain=chain,
+            has_power_tracking=has_power_tracking,
+            power_through_chain_dbm=power_through_chain_dbm,
+            power_through_chain_watts=power_through_chain_watts,
+            saturation_flags=saturation_flags,
+            has_rx_sweep=has_rx_sweep,
+            damage_level_dbm=damage_level_dbm,
+            min_damage_threshold_dbm=min_damage_threshold_dbm,
+            power_through_chain_at_threshold=power_through_chain_at_threshold
         )
 
-    def analyze_frequency_range(self, chain: RFChain) -> FrequencyAnalysis:
-        """
-        Analyze chain across its frequency range.
-
-        Args:
-            chain: RF chain to analyze.
-
-        Returns:
-            FrequencyAnalysis with results at all frequency points.
-        """
-        freq_min, freq_max = chain.freq_range_ghz
-        frequencies = np.linspace(freq_min, freq_max, self.settings.frequency_points)
-
-        gains = np.zeros(len(frequencies))
-        nfs = np.zeros(len(frequencies))
-        sensitivities = np.zeros(len(frequencies))
-        dynamic_ranges = np.zeros(len(frequencies))
-
-        for i, freq in enumerate(frequencies):
-            result = self.analyze_cascade(chain, freq)
-            gains[i] = result.total_gain_db
-            nfs[i] = result.total_nf_db
-            sensitivities[i] = result.sensitivity_dbm
-            dynamic_ranges[i] = result.dynamic_range_db
-
-        return FrequencyAnalysis(
-            frequencies_ghz=frequencies,
-            gains_db=gains,
-            noise_figures_db=nfs,
-            sensitivities_dbm=sensitivities,
-            dynamic_ranges_db=dynamic_ranges
-        )
-
-    def track_power(self, chain: RFChain, freq_ghz: float,
-                    input_power_dbm: float) -> List[PowerPoint]:
-        """
-        Track power level through the chain.
-
-        Args:
-            chain: RF chain to analyze.
-            freq_ghz: Frequency in GHz.
-            input_power_dbm: Input power in dBm.
-
-        Returns:
-            List of PowerPoint objects showing power at each stage.
-        """
-        components = chain.get_components_ordered()
-        power_points = []
-
-        current_power = input_power_dbm
-        cumulative_gain = 0.0
-
-        for i, comp in enumerate(components):
-            gain_db = comp.get_gain_at_freq(freq_ghz)
-            output_power = current_power + gain_db
-            cumulative_gain += gain_db
-
-            # Check for compression
-            is_compressed = False
-            compression = 0.0
-            if output_power > comp.p1db_dbm:
-                is_compressed = True
-                compression = output_power - comp.p1db_dbm
-                # Limit output to saturation
-                output_power = min(output_power, comp.psat_dbm)
-
-            power_points.append(PowerPoint(
-                component_name=comp.name,
-                order=i,
-                input_power_dbm=current_power,
-                output_power_dbm=output_power,
-                gain_db=gain_db,
-                cumulative_gain_db=cumulative_gain,
-                is_compressed=is_compressed,
-                compression_db=compression
-            ))
-
-            current_power = output_power
-
-        return power_points
-
-    def analyze_tx_chain(self, chain: RFChain, freq_ghz: float) -> Dict[str, Any]:
-        """
-        Analyze transmit chain including EIRP calculation.
-
-        Args:
-            chain: TX chain to analyze.
-            freq_ghz: Frequency in GHz.
-
-        Returns:
-            Dictionary with TX analysis results.
-        """
-        # Track power through chain
-        power_points = self.track_power(chain, freq_ghz, chain.source_power_dbm)
-
-        # Get output power (before antenna)
-        if power_points:
-            output_power_dbm = power_points[-1].output_power_dbm
-        else:
-            output_power_dbm = chain.source_power_dbm
-
-        # Total gain
-        cascade = self.analyze_cascade(chain, freq_ghz)
-
-        return {
-            'source_power_dbm': chain.source_power_dbm,
-            'total_gain_db': cascade.total_gain_db,
-            'output_power_dbm': output_power_dbm,
-            'power_points': power_points,
-            'any_compression': any(p.is_compressed for p in power_points)
-        }
-
-    def _calculate_max_input(self, chain: RFChain, freq_ghz: float) -> float:
-        """
-        Calculate maximum input power before compression.
-
-        Works backwards from each component's P1dB to find the
-        limiting input level.
-        """
-        components = chain.get_components_ordered()
-        if not components:
-            return 0.0
-
-        # Calculate cumulative gain to each component
-        cumulative_gains = []
-        total = 0.0
-        for comp in components:
-            total += comp.get_gain_at_freq(freq_ghz)
-            cumulative_gains.append(total)
-
-        # For each component, calculate what input would cause compression
-        max_inputs = []
-        gain_before = 0.0
-        for i, comp in enumerate(components):
-            if i > 0:
-                gain_before = cumulative_gains[i-1]
-
-            # Input power that gives P1dB at this component's output
-            # P1dB = Pin + Gain_before + Gain_component
-            # Pin = P1dB - Gain_before - Gain_component
-            # But we want input that causes compression at INPUT to this stage
-            # So: P_in_to_comp = P1dB - Gain_component
-            # And: P_system_in = P_in_to_comp - Gain_before
-
-            comp_gain = comp.get_gain_at_freq(freq_ghz)
-            if comp.p1db_dbm < 100:  # Only if P1dB is specified
-                p_in_to_comp = comp.p1db_dbm - comp_gain
-                p_system_in = p_in_to_comp - gain_before
-                max_inputs.append(p_system_in)
-
-        if max_inputs:
-            return min(max_inputs)
-        else:
-            return 10.0  # Default if no P1dB specified
-
-    def _empty_result(self, freq_ghz: float) -> CascadeResult:
-        """Return empty result for chains with no components."""
-        return CascadeResult(
+        return ChainAnalysisResults(
             freq_ghz=freq_ghz,
-            total_gain_db=0.0,
-            total_nf_db=0.0,
-            thermal_noise_floor_dbm=-174.0,
-            sensitivity_dbm=-164.0,
-            min_input_dbm=-164.0,
-            max_input_dbm=0.0,
-            dynamic_range_db=164.0
+            n_freq=n_freq,
+            n_components=n_components,
+            total_gain_db=total_gain_db,
+            cascaded_nf_db=cascaded_nf_db,
+            component_gains=component_gains,
+            component_nfs=component_nfs,
+            component_names=component_names,
+            mid_freq_summary=mid_freq_summary,
+            has_nf_data=has_nf_data,
+            is_transmit=is_transmit,
+            has_power_tracking=has_power_tracking,
+            has_rx_sweep=has_rx_sweep,
+            power_through_chain_dbm=power_through_chain_dbm,
+            power_through_chain_watts=power_through_chain_watts,
+            final_output_power_dbm=final_output_power_dbm,
+            final_output_power_watts=final_output_power_watts,
+            saturation_flags=saturation_flags,
+            damage_level_dbm=damage_level_dbm,
+            min_damage_threshold_dbm=min_damage_threshold_dbm,
+            input_power_range_dbm=chain.input_power_range_dbm,
+            chain_config=chain
         )
 
-    @staticmethod
-    def _db_to_linear(db_value: float) -> float:
-        """Convert dB to linear power ratio."""
-        return 10 ** (db_value / 10)
-
-    @staticmethod
-    def _linear_to_db(linear_value: float) -> float:
-        """Convert linear power ratio to dB."""
-        if linear_value <= 0:
-            return -200.0
-        return 10 * math.log10(linear_value)
-
-    def print_cascade_summary(self, result: CascadeResult) -> str:
+    def _compute_cascaded_nf(self, component_gains: np.ndarray, component_nfs: np.ndarray,
+                              n_freq: int, n_components: int) -> tuple:
         """
-        Generate formatted summary of cascade results.
+        Compute cascaded noise figure using Friis formula.
 
-        Args:
-            result: CascadeResult to summarize.
-
-        Returns:
-            Formatted string summary.
+        NF_total = NF1 + (NF2-1)/G1 + (NF3-1)/(G1*G2) + ...
         """
-        lines = [
-            f"\n{'='*60}",
-            f"CASCADE ANALYSIS @ {result.freq_ghz:.2f} GHz",
-            f"{'='*60}",
-            "",
-            "COMPONENT BREAKDOWN:",
-            f"{'Component':<25} {'Gain(dB)':>10} {'NF(dB)':>10} {'Cum.Gain':>10} {'Cum.NF':>10}",
-            "-" * 65
-        ]
+        cascaded_nf_linear = np.zeros(n_freq)
+        has_nf_data = False
 
-        for i, name in enumerate(result.component_names):
-            lines.append(
-                f"{name:<25} {result.component_gains[i]:>10.2f} "
-                f"{result.component_nfs[i]:>10.2f} "
-                f"{result.cumulative_gains[i]:>10.2f} "
-                f"{result.cumulative_nfs[i]:>10.2f}"
+        for f_idx in range(n_freq):
+            nf_total_linear = 0.0
+            gain_product_linear = 1.0  # Cumulative gain up to current stage
+
+            for comp_idx in range(n_components):
+                nf_db = component_nfs[comp_idx, f_idx]
+                gain_db = component_gains[comp_idx, f_idx]
+
+                if not np.isnan(nf_db):
+                    has_nf_data = True
+                    nf_linear = 10 ** (nf_db / 10)
+
+                    # Add this stage's contribution
+                    if comp_idx == 0:
+                        nf_total_linear = nf_linear
+                    else:
+                        nf_total_linear = nf_total_linear + (nf_linear - 1) / gain_product_linear
+
+                # Update cumulative gain for next stage
+                gain_linear = 10 ** (gain_db / 10)
+                gain_product_linear = gain_product_linear * gain_linear
+
+            cascaded_nf_linear[f_idx] = nf_total_linear
+
+        # Convert back to dB
+        if has_nf_data:
+            cascaded_nf_db = 10 * np.log10(np.maximum(cascaded_nf_linear, 1e-10))
+        else:
+            cascaded_nf_db = np.full(n_freq, np.nan)
+
+        return cascaded_nf_db, has_nf_data
+
+    def _build_mid_freq_summary(self, **kwargs) -> MidFreqSummary:
+        """Build mid-frequency summary structure."""
+        freq_ghz = kwargs['freq_ghz']
+        mid_idx = kwargs['mid_idx']
+        total_gain_db = kwargs['total_gain_db']
+        cascaded_nf_db = kwargs['cascaded_nf_db']
+        has_nf_data = kwargs['has_nf_data']
+        component_gains = kwargs['component_gains']
+        component_nfs = kwargs['component_nfs']
+        component_names = kwargs['component_names']
+        components = kwargs['components']
+        chain = kwargs['chain']
+        has_power_tracking = kwargs['has_power_tracking']
+        power_through_chain_dbm = kwargs['power_through_chain_dbm']
+        power_through_chain_watts = kwargs['power_through_chain_watts']
+        saturation_flags = kwargs['saturation_flags']
+        has_rx_sweep = kwargs['has_rx_sweep']
+        damage_level_dbm = kwargs['damage_level_dbm']
+        min_damage_threshold_dbm = kwargs['min_damage_threshold_dbm']
+        power_through_chain_at_threshold = kwargs['power_through_chain_at_threshold']
+
+        summary = MidFreqSummary(
+            frequency_ghz=freq_ghz[mid_idx],
+            total_gain_db=total_gain_db[mid_idx],
+            cascaded_nf_db=cascaded_nf_db[mid_idx] if has_nf_data else None
+        )
+
+        # TX mode specifics
+        if has_power_tracking:
+            summary.input_power_dbm = chain.source_power_dbm
+            summary.output_power_dbm = power_through_chain_dbm[-1, mid_idx]
+            summary.output_power_watts = power_through_chain_watts[-1, mid_idx]
+
+            # Find saturated amplifiers
+            saturated_indices = np.where(saturation_flags[:, mid_idx])[0]
+            summary.saturated_amplifiers = [component_names[i] for i in saturated_indices]
+
+        # RX mode specifics
+        if has_rx_sweep:
+            summary.damage_level_dbm = damage_level_dbm
+            summary.min_safe_input_power_dbm = min_damage_threshold_dbm[mid_idx]
+            summary.adc_input_power_at_threshold_dbm = power_through_chain_at_threshold[-1]
+            summary.power_through_chain_at_threshold = power_through_chain_at_threshold
+
+        # Component contributions
+        for idx, comp_name in enumerate(component_names):
+            # Make safe field name
+            safe_name = comp_name.replace('.', 'p').replace('-', '_')
+
+            contrib = ComponentContribution(
+                name=comp_name,
+                gain_db=component_gains[idx, mid_idx]
             )
 
-        lines.extend([
-            "",
-            "SYSTEM PARAMETERS:",
-            f"  Total Gain:           {result.total_gain_db:>10.2f} dB",
-            f"  Total Noise Figure:   {result.total_nf_db:>10.2f} dB",
-            f"  Thermal Noise Floor:  {result.thermal_noise_floor_dbm:>10.2f} dBm",
-            f"  Sensitivity:          {result.sensitivity_dbm:>10.2f} dBm",
-            "",
-            "DYNAMIC RANGE:",
-            f"  Min Input (MDS):      {result.min_input_dbm:>10.2f} dBm",
-            f"  Max Input (P1dB):     {result.max_input_dbm:>10.2f} dBm",
-            f"  Dynamic Range:        {result.dynamic_range_db:>10.2f} dB",
-            f"{'='*60}"
-        ])
+            if not np.isnan(component_nfs[idx, mid_idx]):
+                contrib.nf_db = component_nfs[idx, mid_idx]
 
-        return "\n".join(lines)
+            if has_power_tracking:
+                contrib.output_power_dbm = power_through_chain_dbm[idx + 1, mid_idx]
+                contrib.output_power_watts = power_through_chain_watts[idx + 1, mid_idx]
+                if saturation_flags[idx, mid_idx]:
+                    contrib.saturated = True
+
+            if has_rx_sweep:
+                contrib.power_at_threshold_dbm = power_through_chain_at_threshold[idx + 1]
+
+            summary.component_contributions[safe_name] = contrib
+
+        return summary
+
+    @staticmethod
+    def _dbm_to_watts(dbm: np.ndarray) -> np.ndarray:
+        """Convert dBm to Watts."""
+        return 10 ** ((dbm - 30) / 10)
+
+    @staticmethod
+    def _watts_to_dbm(watts: np.ndarray) -> np.ndarray:
+        """Convert Watts to dBm."""
+        return 10 * np.log10(watts) + 30
+
+
+# =============================================================================
+# ANALYSIS FUNCTION (matches MATLAB calling convention)
+# =============================================================================
+
+def analyze_rf_chain(chain_config: ChainConfig, n_freq_points: int = 200) -> ChainAnalysisResults:
+    """
+    Analyze RF chain performance.
+
+    Matches MATLAB: results = analyze_rf_chain(chain_config)
+
+    Args:
+        chain_config: ChainConfig from load_chain_config().
+        n_freq_points: Number of frequency points (default 200).
+
+    Returns:
+        ChainAnalysisResults with all analysis data.
+    """
+    analyzer = RFChainAnalyzer(n_freq_points=n_freq_points)
+    return analyzer.analyze(chain_config)
 
 
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
-
-def compare_chains(analyzer: RFChainAnalyzer, chains: List[RFChain],
-                   freq_ghz: float) -> Dict[str, CascadeResult]:
-    """
-    Compare multiple chains at the same frequency.
-
-    Args:
-        analyzer: RFChainAnalyzer instance.
-        chains: List of chains to compare.
-        freq_ghz: Comparison frequency.
-
-    Returns:
-        Dictionary mapping chain ID to CascadeResult.
-    """
-    results = {}
-    for chain in chains:
-        results[chain.id] = analyzer.analyze_cascade(chain, freq_ghz)
-    return results
-
 
 def calculate_noise_temperature(nf_db: float) -> float:
     """
@@ -452,3 +466,117 @@ def calculate_noise_temperature(nf_db: float) -> float:
     """
     nf_linear = 10 ** (nf_db / 10)
     return T0 * (nf_linear - 1)
+
+
+def print_results_summary(results: ChainAnalysisResults) -> str:
+    """
+    Generate formatted summary of analysis results.
+
+    Args:
+        results: ChainAnalysisResults to summarize.
+
+    Returns:
+        Formatted string summary.
+    """
+    lines = [
+        "=" * 60,
+        f"RF CHAIN ANALYSIS RESULTS",
+        "=" * 60,
+        "",
+        f"Chain Type: {'Transmit' if results.is_transmit else 'Receive'}",
+        f"Frequency Range: {results.freq_ghz[0]:.1f} - {results.freq_ghz[-1]:.1f} GHz",
+        f"Components: {results.n_components}",
+        "",
+        f"=== Performance at Mid-Frequency ({results.mid_freq_summary.frequency_ghz:.2f} GHz) ===",
+    ]
+
+    if results.has_power_tracking:
+        lines.append(f"Input Power: {results.mid_freq_summary.input_power_dbm:.2f} dBm")
+        lines.append(f"Output Power: {results.mid_freq_summary.output_power_dbm:.2f} dBm "
+                    f"({results.mid_freq_summary.output_power_watts:.4f} W)")
+
+    lines.append(f"Total Gain: {results.mid_freq_summary.total_gain_db:.2f} dB")
+
+    if results.has_nf_data and results.mid_freq_summary.cascaded_nf_db is not None:
+        lines.append(f"Cascaded NF: {results.mid_freq_summary.cascaded_nf_db:.2f} dB")
+
+    # RX damage threshold
+    if results.has_rx_sweep:
+        lines.extend([
+            "",
+            "=== Damage Threshold Analysis ===",
+            f"Damage Level (at ADC): {results.mid_freq_summary.damage_level_dbm:.1f} dBm",
+            f"Maximum Safe Input Power: {results.mid_freq_summary.min_safe_input_power_dbm:.1f} dBm",
+            f"ADC Input Power @ Threshold: {results.mid_freq_summary.adc_input_power_at_threshold_dbm:.1f} dBm"
+        ])
+
+    # TX saturation warnings
+    if results.has_power_tracking and results.mid_freq_summary.saturated_amplifiers:
+        lines.extend([
+            "",
+            "*** SATURATION WARNING ***",
+            "The following amplifiers are saturated:"
+        ])
+        for amp in results.mid_freq_summary.saturated_amplifiers:
+            lines.append(f"  - {amp}")
+
+    # Component contributions
+    lines.extend(["", "Component Contributions:"])
+    for safe_name, contrib in results.mid_freq_summary.component_contributions.items():
+        line = f"  {contrib.name}: Gain = {contrib.gain_db:.2f} dB"
+        if contrib.nf_db is not None:
+            line += f", NF = {contrib.nf_db:.2f} dB"
+        if results.has_power_tracking:
+            line += f", Pout = {contrib.output_power_dbm:.2f} dBm ({contrib.output_power_watts:.4f} W)"
+            if contrib.saturated:
+                line += " [SATURATED]"
+        elif results.has_rx_sweep:
+            line += f", Pout@Threshold = {contrib.power_at_threshold_dbm:.1f} dBm"
+        lines.append(line)
+
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+def print_gain_breakdown_table(results: ChainAnalysisResults) -> str:
+    """
+    Generate gain breakdown table across frequency.
+
+    Args:
+        results: ChainAnalysisResults.
+
+    Returns:
+        Formatted table string.
+    """
+    # Test frequencies: first, mid, last
+    test_freqs = [results.freq_ghz[0], results.mid_freq_summary.frequency_ghz, results.freq_ghz[-1]]
+
+    lines = [
+        "=== Gain Breakdown Across Frequency ===",
+        ""
+    ]
+
+    # Header
+    header = f"{'Component':<20}"
+    for f in test_freqs:
+        header += f"{f:>12.1f} GHz"
+    lines.append(header)
+    lines.append("-" * 60)
+
+    # Component rows
+    for i, name in enumerate(results.component_names):
+        row = f"{name:<20}"
+        for f in test_freqs:
+            f_idx = np.argmin(np.abs(results.freq_ghz - f))
+            row += f"{results.component_gains[i, f_idx]:>12.2f} dB "
+        lines.append(row)
+
+    # Total row
+    lines.append("-" * 60)
+    row = f"{'TOTAL':<20}"
+    for f in test_freqs:
+        f_idx = np.argmin(np.abs(results.freq_ghz - f))
+        row += f"{results.total_gain_db[f_idx]:>12.2f} dB "
+    lines.append(row)
+
+    return "\n".join(lines)

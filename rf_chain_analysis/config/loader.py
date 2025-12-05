@@ -2,6 +2,7 @@
 RF Chain Configuration Loader
 
 Loads and validates YAML configuration for RF chain analysis.
+Matches MATLAB rf_chain_config_example.m structure.
 """
 
 from dataclasses import dataclass, field
@@ -21,10 +22,7 @@ class ComponentType(Enum):
     CABLE = "cable"
     AMPLIFIER = "amplifier"
     ATTENUATOR = "attenuator"
-    FILTER = "filter"
-    SWITCH = "switch"
     ANTENNA = "antenna"
-    INTEGRATED = "integrated"  # Integrated assemblies like RFP PCB
 
 
 class ChainType(Enum):
@@ -62,189 +60,166 @@ def _to_int(value, default: int = 0) -> int:
 # =============================================================================
 
 @dataclass
-class LossPoint:
-    """Frequency-dependent loss point for cables."""
-    freq_ghz: float
-    loss_db: float
-
-
-@dataclass
-class Component:
-    """Generic RF component."""
+class CableComponent:
+    """Cable component with frequency-dependent loss."""
     id: str
-    type: ComponentType
     name: str
+    order: int
+    loss_point1_ghz: float  # First calibration point frequency
+    loss_point1_db: float   # Loss at first point
+    loss_point2_ghz: float  # Second calibration point frequency
+    loss_point2_db: float   # Loss at second point
+    type: ComponentType = ComponentType.CABLE
 
-    # Common parameters
-    gain_db: float = 0.0           # Positive for amplifiers, negative for losses
-    noise_figure_db: float = 0.0   # NF in dB
-    p1db_dbm: float = 100.0        # 1dB compression point
-    psat_dbm: float = 100.0        # Saturation power
-
-    # Cable-specific
-    loss_points: List[LossPoint] = field(default_factory=list)
-
-    # Attenuator-specific
-    attenuation_db: float = 0.0
-    min_atten_db: float = 0.0
-    max_atten_db: float = 0.0
-
-    # Filter-specific
-    insertion_loss_db: float = 0.0
-    freq_min_ghz: float = 0.0
-    freq_max_ghz: float = 100.0
-
-    # Switch-specific
-    isolation_db: float = 0.0
-
-    # Antenna-specific
-    gain_dbi: float = 0.0
-
-    def get_gain_at_freq(self, freq_ghz: float) -> float:
+    def get_loss_at_freq(self, freq_ghz: float) -> float:
         """
-        Get component gain/loss at specific frequency.
+        Calculate cable loss at frequency using sqrt(f) model.
 
-        Returns:
-            Gain in dB (negative for losses).
+        Loss = k * sqrt(f) where k is derived from two calibration points.
         """
-        if self.type == ComponentType.CABLE:
-            return -self._calculate_cable_loss(freq_ghz)
-        elif self.type == ComponentType.ATTENUATOR:
-            return -self.attenuation_db
-        elif self.type == ComponentType.FILTER:
-            # Check if in passband
-            if self.freq_min_ghz <= freq_ghz <= self.freq_max_ghz:
-                return -self.insertion_loss_db
-            else:
-                return -60.0  # Out of band rejection
-        elif self.type == ComponentType.SWITCH:
-            return -self.insertion_loss_db
-        elif self.type == ComponentType.ANTENNA:
-            return self.gain_dbi
-        else:  # AMPLIFIER, INTEGRATED
-            return self.gain_db
-
-    def get_nf_at_freq(self, freq_ghz: float) -> float:
-        """
-        Get component noise figure at specific frequency.
-
-        For passive devices, NF equals the loss.
-        """
-        if self.type in [ComponentType.CABLE, ComponentType.ATTENUATOR,
-                         ComponentType.FILTER, ComponentType.SWITCH]:
-            # Passive device: NF = Loss
-            return abs(self.get_gain_at_freq(freq_ghz))
-        elif self.type == ComponentType.ANTENNA:
-            return 0.0  # Ideal antenna adds no noise
-        else:
-            return self.noise_figure_db
-
-    def _calculate_cable_loss(self, freq_ghz: float) -> float:
-        """Calculate cable loss using sqrt(f) model."""
-        if not self.loss_points or len(self.loss_points) < 2:
-            return 0.0
-
-        # Use first two points to calculate k coefficient
-        p1 = self.loss_points[0]
-        p2 = self.loss_points[1]
-
-        # Loss = k * sqrt(f)
-        # Solve for k using both points and average
-        k1 = p1.loss_db / math.sqrt(p1.freq_ghz) if p1.freq_ghz > 0 else 0
-        k2 = p2.loss_db / math.sqrt(p2.freq_ghz) if p2.freq_ghz > 0 else 0
+        # Two equations: loss1 = k*sqrt(f1), loss2 = k*sqrt(f2)
+        # Average the two k values for robustness
+        k1 = self.loss_point1_db / math.sqrt(self.loss_point1_ghz) if self.loss_point1_ghz > 0 else 0
+        k2 = self.loss_point2_db / math.sqrt(self.loss_point2_ghz) if self.loss_point2_ghz > 0 else 0
         k = (k1 + k2) / 2
-
         return k * math.sqrt(freq_ghz)
 
-    def __str__(self) -> str:
-        if self.type == ComponentType.AMPLIFIER:
-            return f"{self.name}: G={self.gain_db:.1f}dB, NF={self.noise_figure_db:.1f}dB"
-        elif self.type == ComponentType.CABLE:
-            return f"{self.name}: Cable (freq-dependent loss)"
-        elif self.type == ComponentType.ATTENUATOR:
-            return f"{self.name}: {self.attenuation_db:.1f}dB atten"
-        else:
-            return f"{self.name} ({self.type.value})"
+    def get_gain_at_freq(self, freq_ghz: float) -> float:
+        """Get gain (negative loss) at frequency."""
+        return -self.get_loss_at_freq(freq_ghz)
+
+    def get_nf_at_freq(self, freq_ghz: float) -> float:
+        """For passive devices, NF equals the loss in dB."""
+        return self.get_loss_at_freq(freq_ghz)
 
 
 @dataclass
-class ChainComponent:
-    """Component instance in a chain with order."""
-    component: Component
-    order: int
-
-
-@dataclass
-class RFChain:
-    """Complete RF chain definition."""
+class AmplifierComponent:
+    """Amplifier component with flat gain and optional NF/Psat."""
     id: str
+    name: str
+    order: int
+    gain_db: float
+    noise_figure_db: Optional[float] = None  # None if not specified
+    psat_dbm: Optional[float] = None         # Saturation power
+    type: ComponentType = ComponentType.AMPLIFIER
+
+    def get_gain_at_freq(self, freq_ghz: float) -> float:
+        """Amplifiers have flat gain across frequency."""
+        return self.gain_db
+
+    def get_nf_at_freq(self, freq_ghz: float) -> Optional[float]:
+        """Return noise figure (None if not specified)."""
+        return self.noise_figure_db
+
+
+@dataclass
+class AttenuatorComponent:
+    """Attenuator with linear frequency-dependent attenuation."""
+    id: str
+    name: str
+    order: int
+    atten_min_db: float  # Attenuation at min frequency
+    atten_max_db: float  # Attenuation at max frequency
+    type: ComponentType = ComponentType.ATTENUATOR
+
+    def get_atten_at_freq(self, freq_ghz: float, freq_min: float, freq_max: float) -> float:
+        """
+        Calculate attenuation at frequency using linear interpolation.
+
+        Attenuation varies linearly from atten_min_db at freq_min to
+        atten_max_db at freq_max.
+        """
+        if freq_max == freq_min:
+            return self.atten_min_db
+        return self.atten_min_db + (self.atten_max_db - self.atten_min_db) * \
+               (freq_ghz - freq_min) / (freq_max - freq_min)
+
+    def get_gain_at_freq(self, freq_ghz: float, freq_min: float = 0.1, freq_max: float = 36.0) -> float:
+        """Get gain (negative attenuation) at frequency."""
+        return -self.get_atten_at_freq(freq_ghz, freq_min, freq_max)
+
+    def get_nf_at_freq(self, freq_ghz: float, freq_min: float = 0.1, freq_max: float = 36.0) -> float:
+        """For passive devices, NF equals the attenuation in dB."""
+        return self.get_atten_at_freq(freq_ghz, freq_min, freq_max)
+
+
+@dataclass
+class AntennaComponent:
+    """Antenna component with flat gain."""
+    id: str
+    name: str
+    order: int
+    gain_db: float  # Antenna gain in dBi
+    type: ComponentType = ComponentType.ANTENNA
+
+    def get_gain_at_freq(self, freq_ghz: float) -> float:
+        """Antennas have flat gain across frequency."""
+        return self.gain_db
+
+    def get_nf_at_freq(self, freq_ghz: float) -> float:
+        """Ideal antenna adds no noise."""
+        return 0.0
+
+
+# Union type for any component
+Component = Union[CableComponent, AmplifierComponent, AttenuatorComponent, AntennaComponent]
+
+
+@dataclass
+class ChainConfig:
+    """
+    Complete RF chain configuration.
+
+    Matches MATLAB rf_chain_config_example.m structure.
+    """
     name: str
     description: str
     chain_type: ChainType
-    freq_range_ghz: List[float]
-    components: List[ChainComponent]
+    freq_range_ghz: List[float]  # [min, max]
+    components: Dict[str, Component]  # Component ID -> Component
 
     # TX-specific
     source_power_dbm: float = 0.0
 
+    # RX-specific (for damage threshold analysis)
+    input_power_range_dbm: Optional[List[float]] = None  # [min, max] sweep range
+    damage_level_dbm: Optional[float] = None  # ADC damage threshold
+
     def get_components_ordered(self) -> List[Component]:
-        """Get components in signal path order."""
-        sorted_chain = sorted(self.components, key=lambda c: c.order)
-        return [c.component for c in sorted_chain]
+        """Get components sorted by order."""
+        return sorted(self.components.values(), key=lambda c: c.order)
+
+    def get_freq_min(self) -> float:
+        """Get minimum frequency."""
+        return self.freq_range_ghz[0]
+
+    def get_freq_max(self) -> float:
+        """Get maximum frequency."""
+        return self.freq_range_ghz[1]
+
+    @property
+    def is_transmit(self) -> bool:
+        """Check if this is a transmit chain."""
+        return self.chain_type == ChainType.TRANSMIT
+
+    @property
+    def is_receive(self) -> bool:
+        """Check if this is a receive chain."""
+        return self.chain_type == ChainType.RECEIVE
+
+    @property
+    def has_damage_threshold(self) -> bool:
+        """Check if RX damage threshold analysis is configured."""
+        return (self.input_power_range_dbm is not None and
+                self.damage_level_dbm is not None)
 
     def __str__(self) -> str:
-        comp_list = ", ".join([c.component.name for c in
-                               sorted(self.components, key=lambda x: x.order)])
+        comp_list = ", ".join([c.name for c in self.get_components_ordered()])
         return (f"{self.name} ({self.chain_type.value})\n"
                 f"  {self.description}\n"
+                f"  Frequency: {self.freq_range_ghz[0]:.1f} - {self.freq_range_ghz[1]:.1f} GHz\n"
                 f"  Components: {comp_list}")
-
-
-@dataclass
-class AnalysisSettings:
-    """Analysis configuration settings."""
-    frequency_points: int = 200
-    temperature_k: float = 290.0
-    snr_required_db: float = 10.0
-    bandwidth_hz: float = 20.0e6
-    input_power_sweep_dbm: List[float] = field(default_factory=lambda: [-80, 0])
-    adc_damage_level_dbm: float = 10.0
-
-
-@dataclass
-class ComponentLibrary:
-    """Library of reusable components."""
-    components: Dict[str, Component] = field(default_factory=dict)
-
-    def get(self, component_id: str) -> Optional[Component]:
-        return self.components.get(component_id)
-
-    def list_components(self) -> List[str]:
-        return list(self.components.keys())
-
-    def __len__(self) -> int:
-        return len(self.components)
-
-
-@dataclass
-class RFChainConfig:
-    """Complete RF chain configuration."""
-    component_library: ComponentLibrary
-    chains: Dict[str, RFChain]
-    analysis: AnalysisSettings
-    defaults: Dict[str, Any]
-
-    def get_chain(self, chain_id: str) -> Optional[RFChain]:
-        return self.chains.get(chain_id)
-
-    def list_chains(self) -> List[str]:
-        return list(self.chains.keys())
-
-    def get_receive_chains(self) -> List[RFChain]:
-        return [c for c in self.chains.values() if c.chain_type == ChainType.RECEIVE]
-
-    def get_transmit_chains(self) -> List[RFChain]:
-        return [c for c in self.chains.values() if c.chain_type == ChainType.TRANSMIT]
 
 
 # =============================================================================
@@ -252,117 +227,80 @@ class RFChainConfig:
 # =============================================================================
 
 def _parse_component(comp_id: str, data: dict) -> Component:
-    """Parse a component from dict."""
-    comp_type = ComponentType(data.get('type', 'amplifier'))
+    """Parse a component from dict based on type."""
+    comp_type = data.get('type', 'amplifier')
+    name = data.get('name', comp_id)
+    order = _to_int(data.get('order'), 0)
 
-    # Parse loss points for cables
-    loss_points = []
-    if 'loss_points' in data:
-        for lp in data['loss_points']:
-            loss_points.append(LossPoint(
-                freq_ghz=_to_float(lp.get('freq_ghz'), 1.0),
-                loss_db=_to_float(lp.get('loss_db'), 0.0)
-            ))
+    if comp_type == 'cable':
+        return CableComponent(
+            id=comp_id,
+            name=name,
+            order=order,
+            loss_point1_ghz=_to_float(data.get('loss_point1_ghz'), 1.0),
+            loss_point1_db=_to_float(data.get('loss_point1_db'), 0.0),
+            loss_point2_ghz=_to_float(data.get('loss_point2_ghz'), 18.0),
+            loss_point2_db=_to_float(data.get('loss_point2_db'), 0.0)
+        )
 
-    return Component(
-        id=comp_id,
-        type=comp_type,
-        name=data.get('name', comp_id),
-        gain_db=_to_float(data.get('gain_db'), 0.0),
-        noise_figure_db=_to_float(data.get('noise_figure_db'), 0.0),
-        p1db_dbm=_to_float(data.get('p1db_dbm'), 100.0),
-        psat_dbm=_to_float(data.get('psat_dbm'), 100.0),
-        loss_points=loss_points,
-        attenuation_db=_to_float(data.get('attenuation_db'), 0.0),
-        min_atten_db=_to_float(data.get('min_atten_db'), 0.0),
-        max_atten_db=_to_float(data.get('max_atten_db'), 0.0),
-        insertion_loss_db=_to_float(data.get('insertion_loss_db'), 0.0),
-        freq_min_ghz=_to_float(data.get('freq_min_ghz'), 0.0),
-        freq_max_ghz=_to_float(data.get('freq_max_ghz'), 100.0),
-        isolation_db=_to_float(data.get('isolation_db'), 0.0),
-        gain_dbi=_to_float(data.get('gain_dbi'), 0.0)
-    )
+    elif comp_type == 'amplifier':
+        nf = data.get('noise_figure_db')
+        if nf is not None and nf != 'null':
+            nf = _to_float(nf)
+        else:
+            nf = None
 
+        psat = data.get('psat_dbm')
+        if psat is not None and psat != 'null':
+            psat = _to_float(psat)
+        else:
+            psat = None
 
-def _parse_component_library(data: dict) -> ComponentLibrary:
-    """Parse component library from dict."""
-    components = {}
-    for comp_id, comp_data in data.items():
-        components[comp_id] = _parse_component(comp_id, comp_data)
-    return ComponentLibrary(components=components)
+        return AmplifierComponent(
+            id=comp_id,
+            name=name,
+            order=order,
+            gain_db=_to_float(data.get('gain_db'), 0.0),
+            noise_figure_db=nf,
+            psat_dbm=psat
+        )
 
+    elif comp_type == 'attenuator':
+        return AttenuatorComponent(
+            id=comp_id,
+            name=name,
+            order=order,
+            atten_min_db=_to_float(data.get('atten_min_db'), 0.0),
+            atten_max_db=_to_float(data.get('atten_max_db'), 0.0)
+        )
 
-def _parse_chain(chain_id: str, data: dict, library: ComponentLibrary) -> RFChain:
-    """Parse an RF chain from dict."""
-    # Parse chain type
-    chain_type_str = data.get('type', 'receive')
-    chain_type = ChainType(chain_type_str)
+    elif comp_type == 'antenna':
+        return AntennaComponent(
+            id=comp_id,
+            name=name,
+            order=order,
+            gain_db=_to_float(data.get('gain_db'), 0.0)
+        )
 
-    # Parse frequency range
-    freq_range = data.get('freq_range_ghz', [2.0, 18.0])
-    if isinstance(freq_range, list):
-        freq_range = [_to_float(f) for f in freq_range]
     else:
-        freq_range = [2.0, 18.0]
-
-    # Parse components
-    chain_components = []
-    for comp_entry in data.get('components', []):
-        comp_ref = comp_entry.get('ref')
-        order = _to_int(comp_entry.get('order'), 0)
-
-        if comp_ref and comp_ref in library.components:
-            chain_components.append(ChainComponent(
-                component=library.components[comp_ref],
-                order=order
-            ))
-
-    return RFChain(
-        id=chain_id,
-        name=data.get('name', chain_id),
-        description=data.get('description', ''),
-        chain_type=chain_type,
-        freq_range_ghz=freq_range,
-        components=chain_components,
-        source_power_dbm=_to_float(data.get('source_power_dbm'), 0.0)
-    )
+        raise ValueError(f"Unknown component type: {comp_type}")
 
 
-def _parse_analysis_settings(data: dict) -> AnalysisSettings:
-    """Parse analysis settings from dict."""
-    power_sweep = data.get('input_power_sweep_dbm', [-80, 0])
-    if isinstance(power_sweep, list):
-        power_sweep = [_to_float(p) for p in power_sweep]
-    else:
-        power_sweep = [-80, 0]
-
-    return AnalysisSettings(
-        frequency_points=_to_int(data.get('frequency_points'), 200),
-        temperature_k=_to_float(data.get('temperature_k'), 290.0),
-        snr_required_db=_to_float(data.get('snr_required_db'), 10.0),
-        bandwidth_hz=_to_float(data.get('bandwidth_hz'), 20.0e6),
-        input_power_sweep_dbm=power_sweep,
-        adc_damage_level_dbm=_to_float(data.get('adc_damage_level_dbm'), 10.0)
-    )
-
-
-# =============================================================================
-# MAIN LOADING FUNCTION
-# =============================================================================
-
-def load_rf_chain_config(filepath: Union[str, Path] = None) -> RFChainConfig:
+def load_chain_config(filepath: Union[str, Path] = None) -> ChainConfig:
     """
     Load RF chain configuration from YAML file.
 
+    Matches MATLAB rf_chain_config_example.m format.
+
     Args:
-        filepath: Path to rf_chains.yaml. If None, uses default location.
+        filepath: Path to config YAML. If None, uses default location.
 
     Returns:
-        RFChainConfig object with all chain definitions.
+        ChainConfig object with chain definition.
     """
     if filepath is None:
         config_dir = Path(__file__).parent
-        filepath = config_dir / "rf_chains.yaml"
+        filepath = config_dir / "rf_chain_config.yaml"
 
     filepath = Path(filepath)
     if not filepath.exists():
@@ -371,26 +309,50 @@ def load_rf_chain_config(filepath: Union[str, Path] = None) -> RFChainConfig:
     with open(filepath, 'r') as f:
         data = yaml.safe_load(f) or {}
 
-    # Parse defaults
-    defaults = data.get('defaults', {})
+    # Parse chain settings
+    chain_data = data.get('chain', {})
 
-    # Parse component library
-    library = _parse_component_library(data.get('components', {}))
+    # Chain type
+    chain_type_str = chain_data.get('type', 'receive')
+    chain_type = ChainType(chain_type_str)
 
-    # Parse chains
-    chains = {}
-    for chain_id, chain_data in data.get('chains', {}).items():
-        chains[chain_id] = _parse_chain(chain_id, chain_data, library)
+    # Frequency range
+    freq_range = chain_data.get('freq_range_ghz', [2.0, 18.0])
+    if isinstance(freq_range, list):
+        freq_range = [_to_float(f) for f in freq_range]
+    else:
+        freq_range = [2.0, 18.0]
 
-    # Parse analysis settings
-    analysis = _parse_analysis_settings(data.get('analysis', {}))
+    # Parse components
+    components = {}
+    for comp_id, comp_data in data.get('components', {}).items():
+        components[comp_id] = _parse_component(comp_id, comp_data)
 
-    return RFChainConfig(
-        component_library=library,
-        chains=chains,
-        analysis=analysis,
-        defaults=defaults
+    # RX damage threshold settings
+    input_power_range = chain_data.get('input_power_range_dbm')
+    if input_power_range is not None:
+        input_power_range = [_to_float(p) for p in input_power_range]
+
+    damage_level = chain_data.get('damage_level_dbm')
+    if damage_level is not None:
+        damage_level = _to_float(damage_level)
+
+    return ChainConfig(
+        name=chain_data.get('name', 'RF Chain'),
+        description=chain_data.get('description', ''),
+        chain_type=chain_type,
+        freq_range_ghz=freq_range,
+        components=components,
+        source_power_dbm=_to_float(chain_data.get('source_power_dbm'), 0.0),
+        input_power_range_dbm=input_power_range,
+        damage_level_dbm=damage_level
     )
+
+
+# Legacy compatibility alias
+def load_rf_chain_config(filepath: Union[str, Path] = None) -> ChainConfig:
+    """Legacy alias for load_chain_config."""
+    return load_chain_config(filepath)
 
 
 # =============================================================================
@@ -400,14 +362,36 @@ def load_rf_chain_config(filepath: Union[str, Path] = None) -> RFChainConfig:
 if __name__ == "__main__":
     print("Testing RF Chain configuration loader...")
 
-    config = load_rf_chain_config()
+    config = load_chain_config()
 
-    print(f"\nComponent Library: {len(config.component_library)} components")
-    for comp_id in config.component_library.list_components():
-        print(f"  - {comp_id}")
+    print(f"\n{config}")
+    print(f"\nChain type: {config.chain_type.value}")
+    print(f"Is transmit: {config.is_transmit}")
 
-    print(f"\nChains: {len(config.chains)}")
-    for chain_id, chain in config.chains.items():
-        print(f"\n{chain}")
+    if config.is_transmit:
+        print(f"Source power: {config.source_power_dbm} dBm")
+
+    print(f"\nComponents ({len(config.components)}):")
+    for comp in config.get_components_ordered():
+        print(f"  {comp.order}. {comp.name} ({comp.type.value})")
+        if isinstance(comp, CableComponent):
+            print(f"      Loss: {comp.loss_point1_db} dB @ {comp.loss_point1_ghz} GHz, "
+                  f"{comp.loss_point2_db} dB @ {comp.loss_point2_ghz} GHz")
+        elif isinstance(comp, AmplifierComponent):
+            print(f"      Gain: {comp.gain_db} dB, NF: {comp.noise_figure_db} dB, Psat: {comp.psat_dbm} dBm")
+        elif isinstance(comp, AttenuatorComponent):
+            print(f"      Atten: {comp.atten_min_db} - {comp.atten_max_db} dB")
+        elif isinstance(comp, AntennaComponent):
+            print(f"      Gain: {comp.gain_db} dBi")
+
+    # Test frequency-dependent calculations
+    print(f"\nGain at 10 GHz:")
+    freq_min, freq_max = config.get_freq_min(), config.get_freq_max()
+    for comp in config.get_components_ordered():
+        if isinstance(comp, AttenuatorComponent):
+            gain = comp.get_gain_at_freq(10.0, freq_min, freq_max)
+        else:
+            gain = comp.get_gain_at_freq(10.0)
+        print(f"  {comp.name}: {gain:.2f} dB")
 
     print("\nConfiguration loading successful!")

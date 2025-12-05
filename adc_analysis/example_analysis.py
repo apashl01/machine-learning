@@ -2,10 +2,8 @@
 """
 ADC Analysis Example
 
-Demonstrates complete ADC performance analysis including:
-- Measurement accuracy (amplitude, timing, frequency, phase)
-- Receiver sensitivity with LNA optimization
-- Saturation and damage threshold analysis
+Demonstrates RF ADC performance analysis matching MATLAB example_adc_analysis.m.
+Compares two ADC models with different noise specification formats.
 """
 
 import sys
@@ -15,176 +13,212 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from adc_analysis import (
-    load_adc_config,
-    MeasurementAnalyzer,
-    SensitivityAnalyzer,
-    SaturationAnalyzer
-)
-from adc_analysis.visualization import (
-    plot_measurement_summary,
-    plot_snr_vs_input,
-    plot_sensitivity_comparison,
-    plot_lna_heatmap,
-    plot_saturation_analysis,
-    plot_safe_operating_zones
+    load_adc_specs,
+    load_model1_specs,
+    load_model2_specs,
+    AnalysisConfig,
+    analyze_rf_adc,
+    print_results_summary,
+    compare_adcs,
+    print_comparison_table
 )
 
 
 def main():
-    """Run ADC analysis example."""
+    """Run ADC analysis example matching MATLAB."""
 
     print("=" * 70)
-    print("ADC PERFORMANCE ANALYSIS")
+    print("RF ADC PERFORMANCE ANALYSIS")
     print("=" * 70)
 
-    # Load configuration
-    print("\n[1] Loading ADC Configuration...")
-    config = load_adc_config()
+    # Load ADC specifications for both models
+    print("\n[1] Loading ADC Specifications...")
 
-    print(f"\n    ADC Specifications:")
-    print(f"      Bits: {config.adc.bits}")
-    print(f"      ENOB: {config.adc.enob}")
-    print(f"      Sample Rate: {config.adc.sample_rate_gsps} GSPS")
-    print(f"      Full Scale: {config.adc.fullscale_dbm} dBm")
-    print(f"      NSD: {config.adc.nsd_dbm_hz:.1f} dBm/Hz")
-    print(f"      SFDR: {config.adc.sfdr_dbc} dBc")
+    adc1 = load_model1_specs()
+    adc2 = load_model2_specs()
 
-    print(f"\n    Passive Losses:")
-    print(f"      Cable: {config.passive.cable_loss_db} dB")
-    print(f"      Coupler: {config.passive.coupler_loss_db} dB")
-    print(f"      Switch: {config.passive.switch_loss_db} dB")
-    print(f"      Filter: {config.passive.filter_loss_db} dB")
-    print(f"      Total: {config.passive.total_loss_db} dB")
+    print(f"\n  {adc1.name}:")
+    print(f"    Description: {adc1.description}")
+    print(f"    Sample Rate: {adc1.sample_rate_gsps} GSPS")
+    print(f"    Noise Units: {adc1.noise_units}")
+    print(f"    Number of bands: {adc1.n_bands}")
 
-    # =========================================================================
-    # MEASUREMENT ACCURACY ANALYSIS
-    # =========================================================================
+    print(f"\n  {adc2.name}:")
+    print(f"    Description: {adc2.description}")
+    print(f"    Sample Rate: {adc2.sample_rate_gsps} GSPS")
+    print(f"    Noise Units: {adc2.noise_units}")
+    print(f"    Number of bands: {adc2.n_bands}")
+
+    # Configure analysis
+    print("\n[2] Configuring Analysis...")
+
+    config = AnalysisConfig(
+        rf_input_freq_hz=10e9,   # 10 GHz
+        analysis_bw_hz=20e6,     # 20 MHz
+        input_impedance_ohm=50   # 50 ohm differential
+    )
+
+    print(f"    RF Input Frequency: {config.rf_input_freq_hz/1e9:.1f} GHz")
+    print(f"    Analysis Bandwidth: {config.analysis_bw_hz/1e6:.1f} MHz")
+    print(f"    Input Impedance: {config.input_impedance_ohm} ohm")
+
+    # Analyze ADC Model 1
     print("\n" + "=" * 70)
-    print("MEASUREMENT ACCURACY ANALYSIS")
+    print(f"ANALYSIS: {adc1.name}")
     print("=" * 70)
 
-    measurement_analyzer = MeasurementAnalyzer(config)
-    measurement_result = measurement_analyzer.analyze()
+    results1 = analyze_rf_adc(adc1, config)
+    print(print_results_summary(results1))
 
-    print(measurement_analyzer.print_summary(measurement_result))
-
-    # =========================================================================
-    # SENSITIVITY ANALYSIS
-    # =========================================================================
+    # Analyze ADC Model 2
     print("\n" + "=" * 70)
-    print("RECEIVER SENSITIVITY ANALYSIS")
+    print(f"ANALYSIS: {adc2.name}")
     print("=" * 70)
 
-    sensitivity_analyzer = SensitivityAnalyzer(config)
-    sensitivity_result = sensitivity_analyzer.analyze()
+    results2 = analyze_rf_adc(adc2, config)
+    print(print_results_summary(results2))
 
-    print(sensitivity_analyzer.print_summary(sensitivity_result))
-
-    # =========================================================================
-    # SATURATION ANALYSIS
-    # =========================================================================
+    # Compare ADCs
     print("\n" + "=" * 70)
-    print("SATURATION AND DAMAGE ANALYSIS")
+    print("ADC COMPARISON")
     print("=" * 70)
 
-    saturation_analyzer = SaturationAnalyzer(config, lna_gain_db=30.0)
-    saturation_result = saturation_analyzer.analyze(attenuator_distance_miles=1.0)
+    comparison = compare_adcs([adc1, adc2], config)
+    print(print_comparison_table(comparison))
 
-    print(saturation_analyzer.print_summary(saturation_result))
+    # Identify winner
+    if results1.sensitivity_dbm < results2.sensitivity_dbm:
+        print(f"\n  Better Sensitivity: {adc1.name} by {results2.sensitivity_dbm - results1.sensitivity_dbm:.2f} dB")
+    else:
+        print(f"\n  Better Sensitivity: {adc2.name} by {results1.sensitivity_dbm - results2.sensitivity_dbm:.2f} dB")
 
-    # =========================================================================
-    # GENERATE PLOTS
-    # =========================================================================
+    if results1.dynamic_range_db > results2.dynamic_range_db:
+        print(f"  Better Dynamic Range: {adc1.name} by {results1.dynamic_range_db - results2.dynamic_range_db:.2f} dB")
+    else:
+        print(f"  Better Dynamic Range: {adc2.name} by {results2.dynamic_range_db - results1.dynamic_range_db:.2f} dB")
+
+    # Multi-frequency analysis
+    print("\n" + "=" * 70)
+    print("FREQUENCY SWEEP ANALYSIS")
+    print("=" * 70)
+
+    test_freqs_ghz = [5.0, 10.0, 15.0, 25.0, 35.0]
+
+    print(f"\n{'Frequency':<12} {'ADC1 NF(dBm)':<15} {'ADC1 DR(dB)':<12} {'ADC2 NF(dBm)':<15} {'ADC2 DR(dB)':<12}")
+    print("-" * 70)
+
+    for freq in test_freqs_ghz:
+        config_f = AnalysisConfig(rf_input_freq_hz=freq * 1e9, analysis_bw_hz=20e6)
+        try:
+            r1 = analyze_rf_adc(adc1, config_f)
+            r2 = analyze_rf_adc(adc2, config_f)
+            print(f"{freq:<12.1f} {r1.noise_floor_dbm:<15.2f} {r1.dynamic_range_db:<12.2f} "
+                  f"{r2.noise_floor_dbm:<15.2f} {r2.dynamic_range_db:<12.2f}")
+        except ValueError as e:
+            print(f"{freq:<12.1f} {'N/A':<15} {'N/A':<12} {'N/A':<15} {'N/A':<12}")
+
+    # Generate plots
     print("\n" + "=" * 70)
     print("GENERATING PLOTS")
     print("=" * 70)
 
-    try:
-        figures = []
+    generate_plots(adc1, adc2, config)
 
-        # Measurement summary
-        fig1 = plot_measurement_summary(measurement_result)
-        figures.append(("measurement_summary", fig1))
-        print("    [+] Measurement summary plot")
-
-        # SNR vs input
-        fig2 = plot_snr_vs_input(
-            config.adc.fullscale_dbm,
-            config.adc.enob,
-            config.analysis.input_signal_dbm
-        )
-        figures.append(("snr_vs_input", fig2))
-        print("    [+] SNR vs input plot")
-
-        # Sensitivity comparison
-        fig3 = plot_sensitivity_comparison(sensitivity_result)
-        figures.append(("sensitivity_comparison", fig3))
-        print("    [+] Sensitivity comparison plot")
-
-        # LNA heatmap
-        fig4 = plot_lna_heatmap(sensitivity_result)
-        figures.append(("lna_heatmap", fig4))
-        print("    [+] LNA optimization heatmap")
-
-        # Saturation analysis
-        fig5 = plot_saturation_analysis(saturation_result)
-        figures.append(("saturation_analysis", fig5))
-        print("    [+] Saturation analysis plot")
-
-        # Safe operating zones
-        fig6 = plot_safe_operating_zones(saturation_result)
-        figures.append(("safe_zones", fig6))
-        print("    [+] Safe operating zones plot")
-
-        # Save plots
-        output_dir = Path(__file__).parent / "output"
-        output_dir.mkdir(exist_ok=True)
-
-        for name, fig in figures:
-            filepath = output_dir / f"adc_{name}.png"
-            fig.savefig(filepath, dpi=150, bbox_inches='tight')
-            print(f"    Saved: {filepath}")
-
-        plt.show()
-
-    except Exception as e:
-        print(f"    Plot generation error: {e}")
-        print("    (Plots may not display in non-GUI environment)")
-
-    # =========================================================================
-    # SUMMARY
-    # =========================================================================
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
 
-    print("\nKey Findings:")
-    print(f"\n  MEASUREMENT ACCURACY:")
-    print(f"    - TOA: {measurement_result.timing.toa_accuracy_ns:.2f} ns")
-    print(f"    - Frequency (IFM): {measurement_result.frequency.ifm_accuracy_hz:.0f} Hz")
-    print(f"    - Phase: {measurement_result.phase.phase_accuracy_deg:.2f} deg")
-    print(f"    - AOA: {measurement_result.phase.aoa_accuracy_deg:.2f} deg")
 
-    print(f"\n  SENSITIVITY:")
-    print(f"    - Passive-only MDS: {sensitivity_result.passive.mds_dbm:.2f} dBm")
-    print(f"    - Optimal LNA: Gain={sensitivity_result.optimal_lna.gain_db:.0f}dB, "
-          f"NF={sensitivity_result.optimal_lna.nf_db:.1f}dB")
-    print(f"    - Best MDS: {sensitivity_result.optimal_lna.mds_dbm:.2f} dBm")
-    print(f"    - Improvement: {sensitivity_result.optimal_lna.improvement_db:.2f} dB")
+def generate_plots(adc1, adc2, config):
+    """Generate comparison plots."""
 
-    print(f"\n  SATURATION:")
-    # Find highest EIRP that's still safe
-    safe_eirps = [cd for cd in saturation_result.critical_distances
-                  if cd.status == 'SAFE']
-    if safe_eirps:
-        max_safe = max(cd.eirp_dbm for cd in safe_eirps)
-        print(f"    - Safe for EIRP up to: {max_safe:.0f} dBm (at all distances)")
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-    if saturation_result.attenuator_recommendation.is_needed:
-        print(f"    - High-power operation requires: "
-              f"{saturation_result.attenuator_recommendation.required_attenuation_db:.0f} dB attenuator")
+    # Plot 1: Band specifications comparison
+    ax1 = axes[0, 0]
+    x = np.arange(min(adc1.n_bands, adc2.n_bands))
+    width = 0.35
+
+    bars1 = ax1.bar(x - width/2, adc1.sfdr_db[:len(x)], width, label=adc1.name, color='steelblue')
+    bars2 = ax1.bar(x + width/2, adc2.sfdr_db[:len(x)], width, label=adc2.name, color='coral')
+
+    ax1.set_xlabel('Band')
+    ax1.set_ylabel('SFDR (dB)')
+    ax1.set_title('SFDR by Frequency Band')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([f"Band {i+1}" for i in range(len(x))])
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # Plot 2: Noise density comparison
+    ax2 = axes[0, 1]
+    bars1 = ax2.bar(x - width/2, adc1.noise_density[:len(x)], width, label=f"{adc1.name} ({adc1.noise_units})", color='steelblue')
+    bars2 = ax2.bar(x + width/2, adc2.noise_density[:len(x)], width, label=f"{adc2.name} ({adc2.noise_units})", color='coral')
+
+    ax2.set_xlabel('Band')
+    ax2.set_ylabel('Noise Density (dB/Hz)')
+    ax2.set_title('Noise Density by Frequency Band')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([f"Band {i+1}" for i in range(len(x))])
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    # Plot 3: Dynamic range breakdown
+    ax3 = axes[1, 0]
+    results1 = analyze_rf_adc(adc1, config)
+    results2 = analyze_rf_adc(adc2, config)
+
+    categories = ['Noise-Limited\nDR', 'SFDR-Limited\nDR', 'Effective\nDR']
+    values1 = [results1.noise_limited_dr_db, results1.sfdr_limited_dr_db, results1.dynamic_range_db]
+    values2 = [results2.noise_limited_dr_db, results2.sfdr_limited_dr_db, results2.dynamic_range_db]
+
+    x_cat = np.arange(len(categories))
+    bars1 = ax3.bar(x_cat - width/2, values1, width, label=adc1.name, color='steelblue')
+    bars2 = ax3.bar(x_cat + width/2, values2, width, label=adc2.name, color='coral')
+
+    ax3.set_xlabel('Metric')
+    ax3.set_ylabel('Dynamic Range (dB)')
+    ax3.set_title(f'Dynamic Range @ {config.rf_input_freq_hz/1e9:.0f} GHz')
+    ax3.set_xticks(x_cat)
+    ax3.set_xticklabels(categories)
+    ax3.legend()
+    ax3.grid(True, alpha=0.3, axis='y')
+
+    # Plot 4: Key metrics comparison
+    ax4 = axes[1, 1]
+    metrics = ['Sensitivity\n(dBm)', 'Noise Floor\n(dBm)', 'Equiv. NF\n(dB)']
+    values1 = [results1.sensitivity_dbm, results1.noise_floor_dbm, results1.equivalent_noise_figure_db]
+    values2 = [results2.sensitivity_dbm, results2.noise_floor_dbm, results2.equivalent_noise_figure_db]
+
+    x_met = np.arange(len(metrics))
+    bars1 = ax4.bar(x_met - width/2, values1, width, label=adc1.name, color='steelblue')
+    bars2 = ax4.bar(x_met + width/2, values2, width, label=adc2.name, color='coral')
+
+    ax4.set_xlabel('Metric')
+    ax4.set_ylabel('Value')
+    ax4.set_title(f'Key Metrics @ {config.rf_input_freq_hz/1e9:.0f} GHz')
+    ax4.set_xticks(x_met)
+    ax4.set_xticklabels(metrics)
+    ax4.legend()
+    ax4.grid(True, alpha=0.3, axis='y')
+
+    fig.suptitle('ADC Comparison Analysis', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+
+    # Save plot
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(exist_ok=True)
+    filepath = output_dir / "adc_comparison.png"
+    fig.savefig(filepath, dpi=150, bbox_inches='tight')
+    print(f"\nPlot saved to: {filepath}")
+
+    try:
+        plt.show()
+    except Exception:
+        print("(Non-GUI environment - plot saved but not displayed)")
 
 
 if __name__ == "__main__":
