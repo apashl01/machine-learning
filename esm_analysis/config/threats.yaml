@@ -1,0 +1,236 @@
+# =============================================================================
+# THREAT LIBRARY
+# =============================================================================
+# Definitions of radar threats for ESM detection analysis.
+# Each threat includes RF parameters, scan characteristics, and detection requirements.
+# =============================================================================
+
+# Default values applied to all threats unless overridden
+defaults:
+  antenna_gain_dbi: 30.0      # Typical main beam gain
+  first_sidelobe_db: -20.0    # Sidelobe relative to main beam
+  back_lobe_db: -30.0         # Back lobe relative to main beam
+  scan_type: "rotating"       # rotating, sector, phased_array
+  polarization: "horizontal"
+
+# -----------------------------------------------------------------------------
+# THREAT DEFINITIONS
+# -----------------------------------------------------------------------------
+threats:
+  # -------------------------------------------------------------------------
+  # SURFACE-TO-AIR MISSILE (SAM) RADARS
+  # -------------------------------------------------------------------------
+
+  sa_10_engagement:
+    name: "SA-10 Engagement Radar"
+    category: "SAM"
+    priority: 1                    # 1 = highest priority
+
+    # RF Parameters
+    frequency_hz: 10.0e9           # X-band (10 GHz)
+    peak_power_w: 150000           # 150 kW peak power
+    antenna_gain_dbi: 38.0         # High-gain tracking antenna
+
+    # Pulse Parameters
+    pri_us: 1000                   # Pulse repetition interval (1 ms)
+    pulse_width_us: 1.0            # Pulse width
+    duty_cycle: 0.001              # PW / PRI
+
+    # Scan Parameters
+    scan_type: "sector"
+    scan_period_s: 2.0             # 2-second scan period
+    scan_sector_deg: 60            # +/- 30 degree sector
+
+    # Detection Requirements
+    required_detection_range_m: 150000  # Must detect at 150 km
+
+    notes: "High-priority SAM engagement radar. Fast scan, high power."
+
+  sa_10_surveillance:
+    name: "SA-10 Surveillance Radar"
+    category: "SAM"
+    priority: 2
+
+    frequency_hz: 3.0e9            # S-band
+    peak_power_w: 500000           # 500 kW
+    antenna_gain_dbi: 35.0
+
+    pri_us: 3000                   # 3 ms PRI
+    pulse_width_us: 50.0
+    duty_cycle: 0.017
+
+    scan_type: "rotating"
+    scan_period_s: 12.0            # 12-second rotation (5 RPM)
+    scan_sector_deg: 360           # Full rotation
+
+    required_detection_range_m: 200000  # 200 km
+
+    notes: "Long-range surveillance. Slower scan, very high power."
+
+  sa_6_guidance:
+    name: "SA-6 Straight Flush"
+    category: "SAM"
+    priority: 1
+
+    frequency_hz: 8.0e9            # X-band
+    peak_power_w: 200000           # 200 kW
+    antenna_gain_dbi: 34.0
+
+    pri_us: 800
+    pulse_width_us: 0.5
+    duty_cycle: 0.000625
+
+    scan_type: "conical"
+    scan_period_s: 1.5
+    scan_sector_deg: 30            # Narrow sector for tracking
+
+    required_detection_range_m: 100000
+
+    notes: "Mobile SAM system. Rapid engagement capability."
+
+  # -------------------------------------------------------------------------
+  # EARLY WARNING RADARS
+  # -------------------------------------------------------------------------
+
+  ew_radar_vhf:
+    name: "VHF Early Warning Radar"
+    category: "EW"
+    priority: 3
+
+    frequency_hz: 200.0e6          # VHF band (200 MHz)
+    peak_power_w: 2000000          # 2 MW peak
+    antenna_gain_dbi: 20.0         # Lower gain at VHF
+
+    pri_us: 5000                   # 5 ms PRI
+    pulse_width_us: 200.0
+    duty_cycle: 0.04
+
+    scan_type: "rotating"
+    scan_period_s: 20.0            # 20-second rotation
+    scan_sector_deg: 360
+
+    required_detection_range_m: 400000  # 400 km (long range EW)
+
+    notes: "Very long range early warning. Low frequency, high power."
+
+  # -------------------------------------------------------------------------
+  # AIRBORNE INTERCEPTOR RADARS
+  # -------------------------------------------------------------------------
+
+  ai_radar_aesa:
+    name: "Fighter AESA Radar"
+    category: "AI"
+    priority: 1
+
+    frequency_hz: 10.0e9           # X-band
+    peak_power_w: 10000            # 10 kW (lower power, high duty cycle)
+    antenna_gain_dbi: 32.0
+
+    pri_us: 100                    # Fast PRF
+    pulse_width_us: 10.0
+    duty_cycle: 0.10
+
+    scan_type: "phased_array"
+    scan_period_s: 0.5             # Very fast electronic scan
+    scan_sector_deg: 120           # +/- 60 degrees
+
+    required_detection_range_m: 80000
+
+    # AESA-specific parameters
+    first_sidelobe_db: -25.0       # Better sidelobes than mechanical scan
+    back_lobe_db: -35.0
+
+    notes: "Modern AESA fighter radar. Fast scan, low sidelobes."
+
+  ai_radar_legacy:
+    name: "Legacy Fighter Radar"
+    category: "AI"
+    priority: 2
+
+    frequency_hz: 9.5e9
+    peak_power_w: 80000            # 80 kW
+    antenna_gain_dbi: 30.0
+
+    pri_us: 500
+    pulse_width_us: 1.0
+    duty_cycle: 0.002
+
+    scan_type: "sector"
+    scan_period_s: 3.0
+    scan_sector_deg: 120
+
+    required_detection_range_m: 100000
+
+    notes: "Older mechanically-scanned fighter radar."
+
+  # -------------------------------------------------------------------------
+  # NAVAL RADARS
+  # -------------------------------------------------------------------------
+
+  naval_search:
+    name: "Naval Search Radar"
+    category: "Naval"
+    priority: 2
+
+    frequency_hz: 5.5e9            # C-band
+    peak_power_w: 1000000          # 1 MW
+    antenna_gain_dbi: 36.0
+
+    pri_us: 2000
+    pulse_width_us: 2.0
+    duty_cycle: 0.001
+
+    scan_type: "rotating"
+    scan_period_s: 6.0             # 10 RPM
+    scan_sector_deg: 360
+
+    required_detection_range_m: 300000
+
+    notes: "High-power naval surface search radar."
+
+  # -------------------------------------------------------------------------
+  # GROUND-BASED AIR DEFENSE (GBAD)
+  # -------------------------------------------------------------------------
+
+  aaa_fire_control:
+    name: "AAA Fire Control Radar"
+    category: "GBAD"
+    priority: 1
+
+    frequency_hz: 15.0e9           # Ku-band
+    peak_power_w: 50000            # 50 kW
+    antenna_gain_dbi: 28.0
+
+    pri_us: 200
+    pulse_width_us: 0.2
+    duty_cycle: 0.001
+
+    scan_type: "tracking"
+    scan_period_s: 0.1             # Very fast update for fire control
+    scan_sector_deg: 10            # Narrow tracking beam
+
+    required_detection_range_m: 30000  # Shorter range threat
+
+    notes: "Close-range AAA fire control. Very fast updates."
+
+# -----------------------------------------------------------------------------
+# THREAT SETS (for scenario-based analysis)
+# -----------------------------------------------------------------------------
+threat_sets:
+  high_threat_sam:
+    description: "High-threat SAM environment"
+    threats:
+      - sa_10_engagement
+      - sa_10_surveillance
+      - sa_6_guidance
+
+  mixed_threat:
+    description: "Mixed air defense environment"
+    threats:
+      - sa_10_surveillance
+      - ai_radar_aesa
+      - aaa_fire_control
+
+  full_spectrum:
+    description: "All defined threats"
+    threats: "all"
