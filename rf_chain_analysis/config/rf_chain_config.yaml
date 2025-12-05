@@ -63,10 +63,9 @@ components:
     noise_figure_db: null           # Not specified for TX amp
     psat_dbm: 35
 
----
 # Alternative RX chain configuration example
-# Uncomment and modify as needed
-
+# To use: copy the section below to a new file (e.g., rf_chain_rx.yaml)
+#
 # chain:
 #   name: "Example RX Chain"
 #   description: "Antenna -> LNA -> Cable -> Filter"
