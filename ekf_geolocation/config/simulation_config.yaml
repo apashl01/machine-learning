@@ -1,0 +1,68 @@
+# EKF Geolocation Simulation Configuration
+# Matches MATLAB demo/config_setup.m
+
+# Emitter Configuration
+emitter:
+  lat: 35.0                       # Latitude (degrees)
+  lon: -120.0                     # Longitude (degrees)
+  alt: 100.0                      # Altitude (meters)
+  eirp_dbw: 40.0                  # Effective Isotropic Radiated Power (dBW)
+  frequency_hz: 3.0e9             # Carrier frequency (Hz) - 3 GHz default
+
+# Interferometer Configuration
+interferometer:
+  # Mounting position in platform body frame (meters)
+  # Origin at platform center of gravity (CG)
+  # Body frame: X-forward, Y-right, Z-down (aerospace convention)
+  offset_body: [0.0, 0.0, 1.5]    # [X forward, Y right, Z down]
+
+  # Orientation offset from body frame (degrees)
+  orientation: [0.0, 0.0, 0.0]    # [Roll, Pitch, Yaw]
+
+  # Array configuration
+  n_elements: 4
+  c_light_in_per_ns: 11.8028      # Speed of light in inches/nanosecond
+
+  # Element positions (inches) - Non-uniform (Vernier) spacing
+  # Shortest baseline = lambda/2 at operating frequency for ambiguity resolution
+  element_positions: [0.0, 1.968, 3.5, 10.0]  # d_short calculated from frequency
+
+  # Phase error at high SNR (baseline system noise)
+  phase_error_high_snr_deg: 12.0
+
+  # Maximum incident angle for valid measurements
+  max_incident_angle_deg: 70.0
+
+  # Antenna pattern file (optional)
+  antenna_pattern_file: null      # 'antenna_pattern.csv' if available
+
+# Trajectory Configuration
+trajectory:
+  type: figure8                   # Options: circle, figure8, racetrack, sturn,
+                                  #          straight_offset, curved_approach
+  standoff_distance_km: 10.0      # Nominal standoff distance from emitter
+  size_scale: 1.5                 # Scale factor for trajectory size
+  altitude_mean: 3000.0           # Mean altitude (meters)
+  altitude_variation: 500.0       # Altitude variation amplitude (meters)
+
+# Simulation Parameters
+simulation:
+  dt: 1.0                         # Time step (seconds)
+  t_total: 300.0                  # Total simulation time (seconds)
+  random_seed: 42                 # Random seed for reproducibility
+
+# EKF Tuning Parameters
+ekf:
+  initial_offset_km: 5.0          # Initial guess offset from true position
+
+  # Default parameters (used if parameter sweep disabled)
+  default_Q: 0.01                 # Process noise
+  default_P0: 10000.0             # Initial covariance
+  default_R_scale: 1.0            # Measurement noise scale factor
+
+# Parameter Sweep Configuration (optional)
+parameter_sweep:
+  enabled: true
+  Q_values: [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
+  P0_values: [1000, 5000, 10000, 20000, 50000]
+  R_scale_values: [0.3, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0]
