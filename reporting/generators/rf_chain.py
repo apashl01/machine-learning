@@ -74,7 +74,16 @@ def add_rf_chain_slides(gen: DesignReviewGenerator,
     if output_dir:
         output_path = Path(output_dir)
 
-        # Power vs frequency
+        # Main analysis plot
+        analysis_plot = output_path / "rf_chain_analysis.png"
+        if analysis_plot.exists():
+            gen.add_content_slide(
+                "RF Chain Analysis",
+                image_path=str(analysis_plot),
+                image_width=10.0
+            )
+
+        # Power vs frequency (alternate name)
         power_plot = output_path / "rf_chain_power.png"
         if power_plot.exists():
             gen.add_content_slide(
@@ -83,7 +92,7 @@ def add_rf_chain_slides(gen: DesignReviewGenerator,
                 image_width=10.0
             )
 
-        # Component cascade
+        # Component cascade (alternate name)
         cascade_plot = output_path / "rf_chain_cascade.png"
         if cascade_plot.exists():
             gen.add_content_slide(

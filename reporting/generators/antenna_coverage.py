@@ -73,7 +73,16 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
     if output_dir:
         output_path = Path(output_dir)
 
-        # Individual antenna patterns
+        # Main UAV coverage analysis plot
+        main_plot = output_path / "uav_coverage_analysis.png"
+        if main_plot.exists():
+            gen.add_content_slide(
+                "UAV Antenna Coverage Analysis",
+                image_path=str(main_plot),
+                image_width=10.0
+            )
+
+        # Individual antenna patterns (alternate name)
         pattern_plot = output_path / "antenna_patterns.png"
         if pattern_plot.exists():
             gen.add_content_slide(
@@ -82,7 +91,7 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
                 image_width=10.0
             )
 
-        # Combined coverage
+        # Combined coverage (alternate name)
         coverage_plot = output_path / "combined_coverage.png"
         if coverage_plot.exists():
             gen.add_content_slide(
@@ -91,7 +100,7 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
                 image_width=10.0
             )
 
-        # 3D coverage visualization
+        # 3D coverage visualization (alternate name)
         coverage_3d_plot = output_path / "coverage_3d.png"
         if coverage_3d_plot.exists():
             gen.add_content_slide(
@@ -100,7 +109,7 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
                 image_width=10.0
             )
 
-        # Coverage gaps
+        # Coverage gaps (alternate name)
         gaps_plot = output_path / "coverage_gaps.png"
         if gaps_plot.exists():
             gen.add_content_slide(

@@ -21,6 +21,7 @@ from .generators import (
     add_direction_finding_slides,
     add_antenna_coverage_slides,
     add_ekf_geolocation_slides,
+    add_esm_slides,
     add_summary_slide
 )
 
@@ -32,5 +33,6 @@ __all__ = [
     'add_direction_finding_slides',
     'add_antenna_coverage_slides',
     'add_ekf_geolocation_slides',
+    'add_esm_slides',
     'add_summary_slide'
 ]

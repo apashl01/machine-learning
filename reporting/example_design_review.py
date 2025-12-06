@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from reporting import DesignReviewGenerator
 from reporting.generators import (
     add_title_slide,
+    add_esm_slides,
     add_rf_chain_slides,
     add_adc_slides,
     add_direction_finding_slides,
@@ -44,6 +45,7 @@ def main():
     gen.add_content_slide(
         "Agenda",
         bullets=[
+            "ESM Analysis - Detection range and sensitivity",
             "RF Chain Analysis - Link budget and component performance",
             "ADC Analysis - Digitizer specifications and performance",
             "Direction Finding - Interferometer accuracy analysis",
@@ -52,6 +54,22 @@ def main():
             "Summary & Next Steps"
         ]
     )
+
+    # ESM Analysis section
+    esm_config = {
+        'frequency_range_ghz': [2, 18],
+        'sensitivity_dbm': -65,
+        'scan_type': 'Frequency Hopping',
+        'revisit_rate_hz': 10
+    }
+    esm_results = {
+        'detection_range_km': 150,
+        'poi': 0.95,
+        'sensitivity_dbm': -65,
+        'max_frequency_ghz': 18
+    }
+    add_esm_slides(gen, config=esm_config, results=esm_results,
+                   output_dir="esm_analysis/output")
 
     # RF Chain section (with example config)
     rf_config = {
@@ -181,6 +199,7 @@ def main():
     add_summary_slide(
         gen,
         key_findings=[
+            "ESM achieves 150 km detection range with 95% POI",
             "RF chain provides 33.5 dB gain with 3.2 dB cascade NF",
             "ADC achieves 10.1 ENOB across operating bands",
             "Interferometer provides 0.5 deg angle accuracy at high SNR",
