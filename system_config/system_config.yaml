@@ -1,0 +1,144 @@
+# EW System Shared Configuration
+# This file defines parameters shared across all analysis packages
+# Changes here propagate to: ESM, Direction Finding, EKF Geolocation, RF Chain
+
+# =============================================================================
+# FREQUENCY CONFIGURATION
+# =============================================================================
+frequency:
+  min_ghz: 2.0                    # Minimum operating frequency
+  max_ghz: 18.0                   # Maximum operating frequency
+  reference_ghz: 10.0             # Reference frequency for single-freq calculations
+
+# =============================================================================
+# ADC CONFIGURATION
+# =============================================================================
+adc:
+  model: "High-Speed RF ADC"
+  sample_rate_gsps: 40.0          # Sample rate (>2x max freq for Nyquist)
+  resolution_bits: 12
+
+  # Noise specification (choose format: dBc/Hz or dBFS/Hz)
+  noise_format: "dBFS/Hz"         # 'dBc/Hz' or 'dBFS/Hz'
+
+  # Per-band specifications (matched to frequency bands)
+  bands:
+    band_1:
+      freq_range_ghz: [2.0, 6.0]
+      noise_density_db: -165      # dBFS/Hz or dBc/Hz depending on format
+      sfdr_db: 72
+      full_scale_dbm: 0           # Full scale input level
+      enob: 10.5                  # Effective number of bits
+    band_2:
+      freq_range_ghz: [6.0, 12.0]
+      noise_density_db: -163
+      sfdr_db: 70
+      full_scale_dbm: -1
+      enob: 10.2
+    band_3:
+      freq_range_ghz: [12.0, 18.0]
+      noise_density_db: -160
+      sfdr_db: 68
+      full_scale_dbm: -2
+      enob: 9.8
+
+  # System-level derived parameters (calculated)
+  input_impedance_ohm: 50
+
+# =============================================================================
+# RF CHAIN CONFIGURATION
+# =============================================================================
+rf_chain:
+  # Cascade noise figure (from rf_chain_analysis or measured)
+  cascade_noise_figure_db: 3.5    # Total system NF
+
+  # Total gain before ADC
+  total_gain_db: 30.0
+
+  # Component-level details (optional, for detailed analysis)
+  components:
+    - name: "Antenna"
+      type: "spiral"
+      gain_db: 5.0
+      noise_figure_db: 0.0
+    - name: "LNA"
+      type: "amplifier"
+      gain_db: 25.0
+      noise_figure_db: 1.5
+    - name: "Cable"
+      type: "coax"
+      gain_db: -2.0
+      noise_figure_db: 2.0
+    - name: "Filter"
+      type: "bandpass"
+      gain_db: -1.5
+      noise_figure_db: 1.5
+
+  # Damage threshold
+  damage_threshold_dbm: 10
+
+# =============================================================================
+# INTERFEROMETER CONFIGURATION (Single Source of Truth)
+# =============================================================================
+interferometer:
+  # Array configuration
+  n_elements: 4
+  c_light_in_per_ns: 11.8028      # Speed of light (inches/nanosecond)
+
+  # Element positions (inches) - Vernier spacing
+  # Shortest baseline = lambda/2 at max frequency for ambiguity resolution
+  # At 18 GHz: lambda = 0.656", lambda/2 = 0.328"
+  element_positions: [0.0, 0.328, 3.5, 10.0]
+
+  # Phase measurement error at high SNR (baseline system noise)
+  phase_error_high_snr_deg: 12.0
+
+  # Maximum incident angle for valid measurements
+  max_incident_angle_deg: 70.0
+
+  # Mounting configuration (for EKF geolocation)
+  mounting:
+    offset_body_m: [0.0, 0.0, 1.5]  # [X forward, Y right, Z down]
+    orientation_deg: [0.0, 0.0, 0.0]  # [Roll, Pitch, Yaw]
+
+# =============================================================================
+# ANTENNA CONFIGURATION
+# =============================================================================
+antennas:
+  # ESM/DF antenna (interferometer elements use this pattern)
+  esm_antenna:
+    type: "spiral"
+    beamwidth_deg: 90
+    peak_gain_dbi: 5.0
+    polarization: "RHCP"
+
+  # Platform antenna positions for coverage analysis
+  platform_antennas:
+    - name: "Forward"
+      type: "spiral"
+      position: "nose"
+      orientation_deg: 0
+      peak_gain_dbi: 5.0
+    - name: "Left"
+      type: "spiral"
+      position: "port_wing"
+      orientation_deg: -90
+      peak_gain_dbi: 5.0
+    - name: "Right"
+      type: "spiral"
+      position: "starboard_wing"
+      orientation_deg: 90
+      peak_gain_dbi: 5.0
+    - name: "Aft"
+      type: "spiral"
+      position: "tail"
+      orientation_deg: 180
+      peak_gain_dbi: 5.0
+
+# =============================================================================
+# DERIVED SYSTEM PARAMETERS (Calculated at runtime)
+# =============================================================================
+# These are computed from the above parameters:
+# - system_noise_floor_dbm: Thermal + RF chain NF + ADC contribution
+# - sensitivity_dbm: Minimum detectable signal
+# - dynamic_range_db: From noise floor to damage threshold
