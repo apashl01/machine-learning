@@ -578,6 +578,103 @@ def create_analysis_requirements(
 
 
 # =============================================================================
+# SHARED SYSTEM CONFIG INTEGRATION
+# =============================================================================
+
+def load_receiver_from_system_config(
+    bandwidth_hz: float = 20.0e6,
+    snr_threshold_db: float = 10.0
+) -> ReceiverConfig:
+    """
+    Load receiver configuration from shared system_config.
+
+    This integrates with the centralized system configuration to ensure
+    the ESM analysis uses consistent noise floor and sensitivity values
+    calculated from ADC + RF chain specifications.
+
+    Args:
+        bandwidth_hz: Receiver bandwidth for noise calculations
+        snr_threshold_db: Required SNR threshold for detection
+
+    Returns:
+        ReceiverConfig with sensitivity derived from shared system config
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config, calculate_sensitivity
+
+    # Load shared config
+    shared = load_system_config()
+
+    # Calculate sensitivity at reference frequency
+    sensitivity_dbm = calculate_sensitivity(
+        shared,
+        frequency_ghz=shared.freq_reference_ghz,
+        bandwidth_hz=bandwidth_hz,
+        snr_required_db=snr_threshold_db
+    )
+
+    # Get antenna configuration
+    ant = shared.antennas
+
+    return ReceiverConfig(
+        freq_min_hz=shared.freq_min_ghz * 1e9,
+        freq_max_hz=shared.freq_max_ghz * 1e9,
+        antenna=AntennaConfig(
+            gain_dbi=ant.esm_peak_gain_dbi,
+            pattern_type=ant.esm_type,
+            azimuth_coverage_deg=ant.esm_beamwidth_deg,
+            elevation_coverage_deg=90.0
+        ),
+        noise_figure_db=shared.rf_chain.cascade_noise_figure_db,
+        bandwidth_hz=bandwidth_hz,
+        system_losses_db=3.0,  # Implementation losses
+        snr_threshold_db=snr_threshold_db
+    )
+
+
+def get_system_sensitivity_dbm(
+    frequency_ghz: float = None,
+    bandwidth_hz: float = 20.0e6,
+    snr_required_db: float = 10.0
+) -> float:
+    """
+    Get system sensitivity in dBm from shared system config.
+
+    This calculates sensitivity based on:
+    - Thermal noise (kTB)
+    - RF chain cascade noise figure
+    - ADC noise contribution
+    - Required SNR
+
+    Args:
+        frequency_ghz: Operating frequency. If None, uses reference frequency.
+        bandwidth_hz: Receiver bandwidth
+        snr_required_db: Required SNR for detection
+
+    Returns:
+        Sensitivity in dBm
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config, calculate_sensitivity
+
+    shared = load_system_config()
+
+    if frequency_ghz is None:
+        frequency_ghz = shared.freq_reference_ghz
+
+    return calculate_sensitivity(
+        shared,
+        frequency_ghz=frequency_ghz,
+        bandwidth_hz=bandwidth_hz,
+        snr_required_db=snr_required_db
+    )
+
+
+# =============================================================================
 # MODULE TEST
 # =============================================================================
 

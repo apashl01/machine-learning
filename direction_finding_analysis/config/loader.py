@@ -2,6 +2,7 @@
 Interferometer Configuration Loader
 
 Loads YAML configuration for RF interferometer analysis.
+Supports loading from local config or shared system_config.
 """
 
 from dataclasses import dataclass, field
@@ -113,10 +114,76 @@ def load_interferometer_config(filepath: Union[str, Path] = None) -> Interferome
     )
 
 
+def load_from_system_config(
+    signal_strength_dbm: float = -60,
+    bandwidth_hz: float = 1e6
+) -> InterferometerConfig:
+    """
+    Load interferometer configuration from shared system_config.
+
+    This integrates with the centralized system configuration to ensure
+    consistency across all analysis packages.
+
+    Args:
+        signal_strength_dbm: Input signal strength for SNR calculations
+        bandwidth_hz: Bandwidth for noise floor calculation
+
+    Returns:
+        InterferometerConfig object with parameters from system_config
+    """
+    # Import system_config
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config, calculate_system_noise_floor
+
+    # Load shared config
+    sys_config = load_system_config()
+
+    # Calculate noise floor from system parameters
+    noise_result = calculate_system_noise_floor(
+        sys_config,
+        frequency_ghz=sys_config.freq_reference_ghz,
+        bandwidth_hz=bandwidth_hz
+    )
+
+    # Build test frequencies across the system frequency range
+    freq_min = sys_config.freq_min_ghz
+    freq_max = sys_config.freq_max_ghz
+    test_freqs = [freq_min]
+    test_freqs.extend([f for f in [5, 10, 15] if freq_min < f < freq_max])
+    test_freqs.append(freq_max)
+
+    return InterferometerConfig(
+        n_elements=sys_config.interferometer.n_elements,
+        freq_range_ghz=[freq_min, freq_max],
+        phase_error_deg=sys_config.interferometer.phase_error_high_snr_deg,
+        signal_strength_dbm=signal_strength_dbm,
+        noise_floor_dbm=noise_result.system_noise_floor_dbm,
+        c_light_in_per_ns=sys_config.interferometer.c_light_in_per_ns,
+        element_positions=list(sys_config.interferometer.element_positions),
+        incident_angles_range=[-sys_config.interferometer.max_incident_angle_deg,
+                               sys_config.interferometer.max_incident_angle_deg],
+        angle_step=0.5,
+        test_frequencies_ghz=test_freqs,
+        antenna_pattern_file=None,
+        antenna_pattern_freq_ghz=sys_config.freq_reference_ghz
+    )
+
+
 if __name__ == "__main__":
+    print("=== Local Config ===")
     config = load_interferometer_config()
     print(f"Elements: {config.n_elements}")
     print(f"Positions: {config.element_positions}")
     print(f"Baselines: {config.baselines}")
-    print(f"Max baseline: {config.max_baseline} inches")
-    print(f"Min baseline: {config.min_baseline} inches")
+    print(f"Noise floor: {config.noise_floor_dbm} dBm")
+
+    print("\n=== From System Config ===")
+    try:
+        config_sys = load_from_system_config()
+        print(f"Elements: {config_sys.n_elements}")
+        print(f"Positions: {config_sys.element_positions}")
+        print(f"Noise floor: {config_sys.noise_floor_dbm:.1f} dBm (from ADC + RF chain)")
+    except ImportError as e:
+        print(f"System config not available: {e}")

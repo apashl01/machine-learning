@@ -2,6 +2,7 @@
 
 from .loader import (
     load_simulation_config,
+    load_interferometer_from_system_config,
     SimulationConfig,
     EmitterConfig,
     InterferometerConfig,
@@ -12,6 +13,7 @@ from .loader import (
 
 __all__ = [
     'load_simulation_config',
+    'load_interferometer_from_system_config',
     'SimulationConfig',
     'EmitterConfig',
     'InterferometerConfig',

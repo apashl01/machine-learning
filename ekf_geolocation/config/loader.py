@@ -181,6 +181,37 @@ class SimulationConfig:
         print()
 
 
+def load_interferometer_from_system_config() -> InterferometerConfig:
+    """
+    Load interferometer configuration from shared system_config.
+
+    This ensures the EKF uses the same interferometer parameters as the
+    direction finding analysis, providing consistency across packages.
+
+    Returns:
+        InterferometerConfig with parameters from shared system_config.
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config as load_shared_config
+
+    # Load shared config
+    shared = load_shared_config()
+    interf = shared.interferometer
+
+    return InterferometerConfig(
+        offset_body=interf.mounting.offset_body_m,
+        orientation=interf.mounting.orientation_deg,
+        n_elements=interf.n_elements,
+        c_light_in_per_ns=interf.c_light_in_per_ns,
+        element_positions=interf.element_positions,
+        phase_error_high_snr_deg=interf.phase_error_high_snr_deg,
+        max_incident_angle_deg=interf.max_incident_angle_deg,
+        antenna_pattern_file=None
+    )
+
+
 def load_simulation_config(config_path: Optional[str] = None) -> SimulationConfig:
     """
     Load simulation configuration from YAML file.
