@@ -579,14 +579,7 @@ class ESMPlotter:
         fig = self.plot_duty_cycle_comparison(scheduling_summary)
         figures.append(fig)
 
-        # 5. Scheduling timeline
-        all_schedules = (
-            scheduling_summary.sidelobe_threats +
-            scheduling_summary.main_beam_threats
-        )
-        if all_schedules:
-            fig = self.plot_scheduling_timeline(all_schedules)
-            figures.append(fig)
+        # Note: Scheduling timeline removed - not useful for design review
 
         return figures
 

@@ -27,7 +27,8 @@ receiver:
 
   # Receiver sensitivity
   noise_figure_db: 6.0        # Receiver noise figure
-  bandwidth_hz: 20.0e6        # Instantaneous bandwidth (20 MHz)
+  bandwidth_hz: 20.0e6        # Channelizer/analysis bandwidth for noise floor (20 MHz)
+  instantaneous_bandwidth_ghz: 1.0  # Instantaneous bandwidth for scanning (1 GHz)
   system_losses_db: 3.0       # Cable, filter, implementation losses
 
   # Detection thresholds

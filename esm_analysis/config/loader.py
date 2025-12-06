@@ -31,7 +31,8 @@ class ReceiverConfig:
     freq_max_hz: float = 18.0e9
     antenna: AntennaConfig = field(default_factory=AntennaConfig)
     noise_figure_db: float = 6.0
-    bandwidth_hz: float = 20.0e6
+    bandwidth_hz: float = 20.0e6  # Channelizer bandwidth for noise calculations
+    instantaneous_bandwidth_ghz: float = 1.0  # IBW for scanning (1 GHz)
     system_losses_db: float = 3.0
     snr_threshold_db: float = 10.0
     tune_time_us: float = 50.0
@@ -41,6 +42,11 @@ class ReceiverConfig:
     def total_losses_db(self) -> float:
         """Total system losses including implementation."""
         return self.system_losses_db
+
+    @property
+    def instantaneous_bandwidth_mhz(self) -> float:
+        """Instantaneous bandwidth in MHz."""
+        return self.instantaneous_bandwidth_ghz * 1000
 
 
 @dataclass
@@ -330,6 +336,7 @@ def _parse_receiver_config(data: dict) -> ReceiverConfig:
         antenna=_parse_antenna_config(antenna_data),
         noise_figure_db=_to_float(data.get('noise_figure_db'), 6.0),
         bandwidth_hz=_to_float(data.get('bandwidth_hz'), 20.0e6),
+        instantaneous_bandwidth_ghz=_to_float(data.get('instantaneous_bandwidth_ghz'), 1.0),
         system_losses_db=_to_float(data.get('system_losses_db'), 3.0),
         snr_threshold_db=_to_float(data.get('snr_threshold_db'), 10.0),
         tune_time_us=_to_float(data.get('tune_time_us'), 50.0),

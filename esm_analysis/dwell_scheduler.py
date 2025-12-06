@@ -116,7 +116,7 @@ class DwellScheduler:
     def __init__(self, receiver: ReceiverParameters,
                  freq_min_GHz: float = 2.0,
                  freq_max_GHz: float = 18.0,
-                 channel_bandwidth_MHz: float = 20.0):
+                 channel_bandwidth_MHz: float = 1000.0):
         """
         Initialize dwell scheduler.
 
@@ -124,7 +124,7 @@ class DwellScheduler:
             receiver: ReceiverParameters for the ESM receiver
             freq_min_GHz: Minimum frequency to scan
             freq_max_GHz: Maximum frequency to scan
-            channel_bandwidth_MHz: Bandwidth of each scan channel
+            channel_bandwidth_MHz: Instantaneous bandwidth of each scan channel (default 1 GHz)
         """
         self.receiver = receiver
         self.freq_min_GHz = freq_min_GHz

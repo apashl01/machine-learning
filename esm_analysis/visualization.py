@@ -1,8 +1,8 @@
 """
 Visualization Module for ESM Detection Analysis
 
-Provides plotting functions for ESM detection range analysis,
-dwell scheduling, and Monte Carlo results.
+Provides plotting functions for ESM detection range analysis
+and dwell scheduling.
 
 Matches output style of MATLAB radar_range_analysis.m
 """
@@ -14,7 +14,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from typing import List, Dict, Optional, Tuple
 from esm_detection import (
     RadarParameters, ReceiverParameters, ESMDetector,
-    compare_to_radar_range, monte_carlo_analysis
+    compare_to_radar_range
 )
 from dwell_scheduler import (
     DwellScheduler, DwellSchedule, EmitterModel, ScanPosition
@@ -230,114 +230,7 @@ def plot_sensitivity_sweep(receiver: ReceiverParameters,
     return fig
 
 
-def plot_monte_carlo_results(mc_results: Dict,
-                              figsize: Tuple[int, int] = (14, 10)) -> plt.Figure:
-    """
-    Plot Monte Carlo analysis results.
-
-    Similar to MATLAB radar_range_analysis.m Monte Carlo plots.
-
-    Args:
-        mc_results: Results from monte_carlo_analysis()
-        figsize: Figure size
-
-    Returns:
-        matplotlib Figure object
-    """
-    fig, axes = plt.subplots(2, 3, figsize=figsize)
-
-    stats = mc_results['statistics']
-    corrs = mc_results['correlations']
-
-    # Plot 1: Histogram of detection ranges
-    ax = axes[0, 0]
-    ax.hist(mc_results['detection_range_km'], bins=50, color='steelblue',
-            edgecolor='black', alpha=0.7)
-    ax.axvline(stats['median'], color='r', linestyle='--', linewidth=2,
-               label=f"Median: {stats['median']:.0f} km")
-    ax.axvline(stats['p5'], color='orange', linestyle=':', linewidth=2,
-               label=f"5th %ile: {stats['p5']:.0f} km")
-    ax.axvline(stats['p95'], color='green', linestyle=':', linewidth=2,
-               label=f"95th %ile: {stats['p95']:.0f} km")
-    ax.set_xlabel('Detection Range (km)')
-    ax.set_ylabel('Count')
-    ax.set_title('Distribution of Detection Ranges', fontweight='bold')
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-
-    # Plot 2: Correlation bar chart (sorted)
-    ax = axes[0, 1]
-    sorted_corrs = sorted(corrs.items(), key=lambda x: abs(x[1]), reverse=True)
-    param_names = [c[0].replace('_', '\n') for c in sorted_corrs]
-    corr_values = [c[1] for c in sorted_corrs]
-    colors = ['green' if c > 0 else 'red' for c in corr_values]
-
-    bars = ax.barh(param_names, corr_values, color=colors, edgecolor='black')
-    ax.axvline(0, color='black', linewidth=1)
-    ax.set_xlabel('Correlation with Detection Range')
-    ax.set_title('Parameter Sensitivity (Correlation)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-
-    # Add impact labels
-    for bar, corr in zip(bars, corr_values):
-        impact = 'HIGH' if abs(corr) > 0.5 else ('MOD' if abs(corr) > 0.2 else 'LOW')
-        ax.text(0.02 if corr < 0 else corr + 0.02,
-                bar.get_y() + bar.get_height()/2,
-                f'{impact}', va='center', fontsize=8)
-
-    # Plot 3: Statistics summary
-    ax = axes[0, 2]
-    ax.axis('off')
-
-    n_iter = len(mc_results['detection_range_km'])
-    summary_text = (
-        f"MONTE CARLO RESULTS\n"
-        f"{'='*30}\n\n"
-        f"Iterations: {n_iter:,}\n\n"
-        f"Detection Range Statistics:\n"
-        f"  Mean: {stats['mean']:.1f} km\n"
-        f"  Median: {stats['median']:.1f} km\n"
-        f"  Std Dev: {stats['std']:.1f} km\n"
-        f"  5th %ile: {stats['p5']:.1f} km\n"
-        f"  95th %ile: {stats['p95']:.1f} km\n"
-        f"  Min: {stats['min']:.1f} km\n"
-        f"  Max: {stats['max']:.1f} km\n\n"
-        f"{'='*30}\n"
-        f"KEY INSIGHTS:\n\n"
-        f"One-way propagation (R^2)\n"
-        f"gives ESM significant\n"
-        f"advantage over radar (R^4)"
-    )
-
-    ax.text(0.1, 0.9, summary_text, transform=ax.transAxes,
-            fontsize=10, verticalalignment='top', fontfamily='monospace',
-            bbox=dict(boxstyle='round', facecolor='lightcyan', alpha=0.5))
-
-    # Plots 4-6: Scatter plots for top 3 parameters
-    sorted_params = sorted(corrs.items(), key=lambda x: abs(x[1]), reverse=True)[:3]
-
-    for idx, (param, corr) in enumerate(sorted_params):
-        ax = axes[1, idx]
-        x_data = mc_results['samples'].get(param, np.zeros(len(mc_results['detection_range_km'])))
-        y_data = mc_results['detection_range_km']
-
-        ax.scatter(x_data, y_data, alpha=0.3, s=5, c='steelblue')
-        ax.set_xlabel(param.replace('_', ' ').title())
-        ax.set_ylabel('Detection Range (km)')
-        ax.set_title(f'{param} (ρ={corr:.2f})', fontweight='bold')
-        ax.grid(True, alpha=0.3)
-
-        # Add trend line
-        z = np.polyfit(x_data, y_data, 1)
-        p = np.poly1d(z)
-        x_line = np.linspace(x_data.min(), x_data.max(), 100)
-        ax.plot(x_line, p(x_line), 'r-', linewidth=2, label='Trend')
-        ax.legend()
-
-    plt.tight_layout()
-    fig.suptitle('Monte Carlo Analysis Results', fontsize=14, fontweight='bold', y=1.02)
-
-    return fig
+# Monte Carlo plotting removed - not needed for design review
 
 
 def plot_dwell_schedule(schedule: DwellSchedule,
