@@ -109,3 +109,16 @@ Here is a prioritized list of updates to make the system more comprehensive and 
     *   Calculate J/S (Jamming-to-Signal) ratio at each time step based on the dynamic geometry between the jammer (platform) and the victim (emitter).
     *   **Critical Input:** Use the `beamwidth_deg` and antenna orientation from `system_config.yaml` to apply a realistic gain pattern (e.g., Gaussian or Cosine-squared) instead of assuming isotropic radiation.
     *   **Reference:** Refer to `jamming/jamming_effectiveness_analysis.m` (reference MATLAB file to be provided) for the specific algorithms and logic used in the legacy implementation.
+
+### 9. Refine ESM Analysis Architecture (Refactoring)
+**Justification:** The `esm_analysis` module currently contains competing detection models: a simple binary threshold model in `core/detection_model.py` and a more detailed statistical model (using Albersheim's equation) in `esm_detection.py`. This duplication leads to inconsistency.
+**Action:**
+*   **Unify Detection Logic:** Refactor `esm_analysis` to use a single, unified detection engine. Recommend promoting the statistical approach in `esm_detection.py` to be the core model, as it provides more fidelity (Pd vs SNR) than the binary model.
+*   **Integrate New Capabilities:** Ensure this unified engine directly calls the new `MeasurementAccuracy` (Pulse Parameter) and `FalseAlarmAnalysis` (Spurious) modules defined in previous steps.
+
+### 10. Refine Dwell Scheduler & Detection Probability Logic (Algorithmic Improvement)
+**Justification:** The current Albersheim's equation implementation hardcodes $P_{fa} = 10^{-6}$ and ignores the user-specified threshold setting. This decouples the simulation from the actual system configuration.
+**Action:**
+*   **Cohesive $P_{fa}$ Derivation:** Calculate $P_{fa}$ dynamically from the user's configured ratio of `snr_threshold_db` to `noise_floor_db`. This derived $P_{fa}$ must be the single source of truth passed into all detection probability calculations.
+*   **Update `esm_detection.py`:** Modify `calculate_detection_probability` to accept this variable $P_{fa}$ instead of using a hardcoded value.
+*   **Update `dwell_scheduler.py`:** Ensure the scheduler uses this dynamic $P_{fa}$ logic. This guarantees that changing the threshold in `system_config.yaml` correctly ripples through to update the Probability of Intercept (POI) and optimized dwell times.
