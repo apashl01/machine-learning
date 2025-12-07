@@ -122,3 +122,13 @@ Here is a prioritized list of updates to make the system more comprehensive and 
 *   **Cohesive $P_{fa}$ Derivation:** Calculate $P_{fa}$ dynamically from the user's configured ratio of `snr_threshold_db` to `noise_floor_db`. This derived $P_{fa}$ must be the single source of truth passed into all detection probability calculations.
 *   **Update `esm_detection.py`:** Modify `calculate_detection_probability` to accept this variable $P_{fa}$ instead of using a hardcoded value.
 *   **Update `dwell_scheduler.py`:** Ensure the scheduler uses this dynamic $P_{fa}$ logic. This guarantees that changing the threshold in `system_config.yaml` correctly ripples through to update the Probability of Intercept (POI) and optimized dwell times.
+
+### 11. Update Reporting to Reflect Multi-Band Capabilities (Reporting Accuracy)
+**Justification:** The current Design Review slides report a single value for key metrics (Frequency Range, Sensitivity, RF Chain Gain/NF), often defaulting to the 2-18 GHz "Mid Band" and ignoring the <2 GHz Low Band. This misrepresents the system's full capabilities.
+**Action:**
+*   **Update `generate_design_review.py`:** Modify the metric collection logic to explicitly loop through all defined frequency bands (Low, Mid, etc.) defined in `system_config`.
+*   **Rename High Band:** Update references of "High Band" (2-18 GHz) to **"Mid Band"** to align with standard nomenclature (since 18 GHz+ would be High Band).
+*   **Multi-Band Metrics:** Report metrics like **Noise Floor**, **Sensitivity**, and **Frequency Range** as a table or list (e.g., "Sensitivity: -90 dBm (Low) / -85 dBm (Mid)") rather than a single average.
+*   **RF Chain Summary:** Update the "RF Chain Performance" slide to explicitly list performance (Gain, NF) for *each* unique chain type (e.g., "Mid Band RX", "Low Band RX") instead of a single summary value.
+*   **Simplify Interferometer Summary:** Remove specific element counts and baseline details from the high-level summary slide, focusing instead on the frequency coverage (2-18 GHz only) to avoid clutter.
+*   **Verify ESM Plots:** Ensure the generated ESM analysis plots (SNR vs Range) explicitly include example emitters for *both* the Low (<2 GHz) and Mid (2-18 GHz) bands to demonstrate full-spectrum capability.
