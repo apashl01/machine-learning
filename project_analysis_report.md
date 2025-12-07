@@ -132,3 +132,11 @@ Here is a prioritized list of updates to make the system more comprehensive and 
 *   **RF Chain Summary:** Update the "RF Chain Performance" slide to explicitly list performance (Gain, NF) for *each* unique chain type (e.g., "Mid Band RX", "Low Band RX") instead of a single summary value.
 *   **Simplify Interferometer Summary:** Remove specific element counts and baseline details from the high-level summary slide, focusing instead on the frequency coverage (2-18 GHz only) to avoid clutter.
 *   **Verify ESM Plots:** Ensure the generated ESM analysis plots (SNR vs Range) explicitly include example emitters for *both* the Low (<2 GHz) and Mid (2-18 GHz) bands to demonstrate full-spectrum capability.
+
+### 12. Refine Analysis Visualizations and Metrics (Visualization Improvement)
+**Justification:** Several analysis plots simplify data in ways that can be misleading (e.g., isotropic interferometer elements, combined antenna coverage). Key performance metrics for geolocation convergence are also missing.
+**Action:**
+*   **Interferometer SNR:** Update `direction_finding_analysis` to use a realistic element gain pattern (e.g., Cosine-squared or user-provided file) instead of isotropic. This should result in SNR degradation at high incident angles in the "SNR vs Angle" plot.
+*   **Blind Spot Visualization:** Enhance `antenna_coverage_analysis` plots to explicitly color-code or overlay "Blind Spot" regions (where Gain < Threshold) on the 2D coverage map.
+*   **Split Coverage Maps:** Generate separate coverage maps for **Low Band** (<2 GHz) and **Mid Band** (2-18 GHz) antennas. Merging them into a single map obscures the gaps inherent in each specific band.
+*   **Geolocation Convergence Metric:** Add a new metric to the EKF simulation results: **"Error after N valid measurements"** (e.g., N=10). This provides a more robust measure of system settling time than just "Time to Convergence," which depends heavily on trajectory.
