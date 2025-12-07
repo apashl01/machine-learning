@@ -23,25 +23,66 @@ def add_rf_chain_slides(gen: DesignReviewGenerator,
     gen.add_section_slide("RF Chain Analysis",
                           "Link Budget & Component Performance")
 
-    # Overview slide
+    # Overview slide - multi-path summary
     if config:
-        overview_bullets = [
-            f"Chain Type: {config.get('chain_type', 'TX/RX')}",
-            f"Frequency: {config.get('frequency_ghz', 'N/A')} GHz",
-            f"Components: {config.get('n_components', 'N/A')}",
-        ]
-        if 'input_power_dbm' in config:
-            overview_bullets.append(f"Input Power: {config['input_power_dbm']} dBm")
-        if 'damage_threshold_dbm' in config:
-            overview_bullets.append(f"Damage Threshold: {config['damage_threshold_dbm']} dBm")
+        overview_bullets = []
+        if 'n_rx_paths' in config:
+            overview_bullets.append(f"Total RX Paths: {config['n_rx_paths']}")
+        if 'n_tx_paths' in config:
+            overview_bullets.append(f"Total TX Paths: {config['n_tx_paths']}")
 
-        gen.add_content_slide(
-            "RF Chain Configuration",
-            bullets=overview_bullets
-        )
+        # Add path details
+        if 'rx_paths' in config:
+            for p in config['rx_paths']:
+                freq = p.get('freq_range_ghz', [0, 0])
+                overview_bullets.append(
+                    f"RX {p['name']}: {p['num_paths']} path(s), {freq[0]}-{freq[1]} GHz"
+                )
+        if 'tx_paths' in config:
+            for p in config['tx_paths']:
+                freq = p.get('freq_range_ghz', [0, 0])
+                overview_bullets.append(
+                    f"TX {p['name']}: {p['num_paths']} path(s), {freq[0]}-{freq[1]} GHz"
+                )
 
-    # Components table
-    if config and 'components' in config:
+        if overview_bullets:
+            gen.add_content_slide(
+                "RF Path Configuration",
+                bullets=overview_bullets
+            )
+
+    # RX Paths table
+    if config and 'rx_paths' in config and config['rx_paths']:
+        headers = ["Path", "Count", "Freq Range", "Gain (dB)", "NF (dB)"]
+        rows = []
+        for p in config['rx_paths']:
+            freq = p.get('freq_range_ghz', [0, 0])
+            rows.append([
+                p.get('name', 'Unknown'),
+                str(p.get('num_paths', 1)),
+                f"{freq[0]}-{freq[1]} GHz",
+                f"{p.get('total_gain_db', 0):.1f}",
+                f"{p.get('cascade_nf_db', 0):.1f}"
+            ])
+        gen.add_table_slide("RX Path Summary", headers, rows)
+
+    # TX Paths table
+    if config and 'tx_paths' in config and config['tx_paths']:
+        headers = ["Path", "Count", "Freq Range", "Gain (dB)", "Output (dBm)"]
+        rows = []
+        for p in config['tx_paths']:
+            freq = p.get('freq_range_ghz', [0, 0])
+            rows.append([
+                p.get('name', 'Unknown'),
+                str(p.get('num_paths', 1)),
+                f"{freq[0]}-{freq[1]} GHz",
+                f"{p.get('total_gain_db', 0):.1f}",
+                f"{p.get('output_power_dbm', 0):.1f}"
+            ])
+        gen.add_table_slide("TX Path Summary", headers, rows)
+
+    # Legacy components table (fallback)
+    elif config and 'components' in config:
         components = config['components']
         headers = ["Component", "Type", "Gain/Loss (dB)", "NF (dB)"]
         rows = []

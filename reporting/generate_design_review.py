@@ -290,40 +290,195 @@ def run_esm_analysis():
 
 
 def get_rf_chain_config():
-    """Get RF chain configuration from shared config."""
+    """Get RF chain configuration and analyze all RX/TX paths."""
     print_header("RF CHAIN ANALYSIS")
 
-    from system_config import load_system_config
+    from pathlib import Path
+    import yaml
+    import numpy as np
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
-    config = load_system_config()
-    rf = config.rf_chain
+    # Load rf_chains from system config YAML
+    config_path = Path(__file__).parent.parent / "system_config" / "system_config.yaml"
+    with open(config_path, 'r') as f:
+        data = yaml.safe_load(f)
 
-    print(f"Using shared RF chain config:")
-    print(f"  Cascade NF: {rf.cascade_noise_figure_db} dB")
-    print(f"  Total gain: {rf.total_gain_db} dB")
+    rf_chains = data.get('rf_chains', {})
+    rx_paths = rf_chains.get('rx_paths', {})
+    tx_paths = rf_chains.get('tx_paths', {})
 
+    # Summary for all paths
+    all_paths = []
+
+    print("Analyzing RF Paths:")
+
+    # Analyze RX paths
+    for path_id, path_data in rx_paths.items():
+        name = path_data.get('name', path_id)
+        num_paths = path_data.get('num_paths', 1)
+        freq_range = path_data.get('freq_range_ghz', [2.0, 18.0])
+        cascade_nf = path_data.get('cascade_noise_figure_db', 3.5)
+        total_gain = path_data.get('total_gain_db', 30.0)
+        damage_thresh = path_data.get('damage_threshold_dbm', 10)
+        components = path_data.get('components', [])
+
+        # Calculate cascade NF from components if available
+        if components:
+            f_total = 1.0
+            g_cumulative = 1.0
+            total_gain_calc = 0.0
+            for i, comp in enumerate(components):
+                g_db = comp.get('gain_db', 0)
+                nf_db = comp.get('noise_figure_db', 0)
+                f_linear = 10 ** (nf_db / 10)
+                g_linear = 10 ** (g_db / 10)
+                total_gain_calc += g_db
+                if i == 0:
+                    f_total = f_linear
+                else:
+                    f_total += (f_linear - 1) / g_cumulative
+                g_cumulative *= g_linear
+            cascade_nf = 10 * np.log10(f_total)
+            total_gain = total_gain_calc
+
+        path_info = {
+            'id': path_id,
+            'name': name,
+            'type': 'RX',
+            'num_paths': num_paths,
+            'freq_range_ghz': freq_range,
+            'cascade_nf_db': cascade_nf,
+            'total_gain_db': total_gain,
+            'damage_threshold_dbm': damage_thresh,
+            'components': components
+        }
+        all_paths.append(path_info)
+        print(f"  RX: {name} ({num_paths} paths)")
+        print(f"      Freq: {freq_range[0]}-{freq_range[1]} GHz, NF: {cascade_nf:.1f} dB, Gain: {total_gain:.1f} dB")
+
+    # Analyze TX paths
+    for path_id, path_data in tx_paths.items():
+        name = path_data.get('name', path_id)
+        num_paths = path_data.get('num_paths', 1)
+        freq_range = path_data.get('freq_range_ghz', [2.0, 18.0])
+        source_power = path_data.get('source_power_dbm', 0)
+        components = path_data.get('components', [])
+
+        # Calculate total gain and output power
+        total_gain = sum(comp.get('gain_db', 0) for comp in components)
+        output_power = source_power + total_gain
+
+        path_info = {
+            'id': path_id,
+            'name': name,
+            'type': 'TX',
+            'num_paths': num_paths,
+            'freq_range_ghz': freq_range,
+            'source_power_dbm': source_power,
+            'total_gain_db': total_gain,
+            'output_power_dbm': output_power,
+            'components': components
+        }
+        all_paths.append(path_info)
+        print(f"  TX: {name} ({num_paths} paths)")
+        print(f"      Freq: {freq_range[0]}-{freq_range[1]} GHz, Gain: {total_gain:.1f} dB, Output: {output_power:.1f} dBm")
+
+    # Generate summary plot
+    output_dir = Path(__file__).parent.parent / "rf_chain_analysis" / "output"
+    output_dir.mkdir(exist_ok=True)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Plot 1: RX Path Summary (bar chart)
+    ax1 = axes[0]
+    rx_paths_list = [p for p in all_paths if p['type'] == 'RX']
+    if rx_paths_list:
+        names = [f"{p['name']}\n({p['num_paths']} path{'s' if p['num_paths']>1 else ''})" for p in rx_paths_list]
+        gains = [p['total_gain_db'] for p in rx_paths_list]
+        nfs = [p['cascade_nf_db'] for p in rx_paths_list]
+
+        x = np.arange(len(names))
+        width = 0.35
+
+        bars1 = ax1.bar(x - width/2, gains, width, label='Total Gain (dB)', color='steelblue')
+        bars2 = ax1.bar(x + width/2, nfs, width, label='Cascade NF (dB)', color='coral')
+
+        ax1.set_ylabel('dB')
+        ax1.set_title('RX Path Performance Summary')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(names, fontsize=9)
+        ax1.legend()
+        ax1.grid(True, alpha=0.3, axis='y')
+
+        # Add value labels
+        for bar in bars1:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                     f'{height:.1f}', ha='center', va='bottom', fontsize=8)
+        for bar in bars2:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                     f'{height:.1f}', ha='center', va='bottom', fontsize=8)
+
+    # Plot 2: TX Path Summary
+    ax2 = axes[1]
+    tx_paths_list = [p for p in all_paths if p['type'] == 'TX']
+    if tx_paths_list:
+        names = [f"{p['name']}\n({p['num_paths']} path{'s' if p['num_paths']>1 else ''})" for p in tx_paths_list]
+        gains = [p['total_gain_db'] for p in tx_paths_list]
+        outputs = [p['output_power_dbm'] for p in tx_paths_list]
+
+        x = np.arange(len(names))
+        width = 0.35
+
+        bars1 = ax2.bar(x - width/2, gains, width, label='Total Gain (dB)', color='steelblue')
+        bars2 = ax2.bar(x + width/2, outputs, width, label='Output Power (dBm)', color='green')
+
+        ax2.set_ylabel('dB / dBm')
+        ax2.set_title('TX Path Performance Summary')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(names, fontsize=9)
+        ax2.legend()
+        ax2.grid(True, alpha=0.3, axis='y')
+
+        # Add value labels
+        for bar in bars1:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                     f'{height:.1f}', ha='center', va='bottom', fontsize=8)
+        for bar in bars2:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                     f'{height:.1f}', ha='center', va='bottom', fontsize=8)
+
+    fig.suptitle('RF Chain Analysis - All Paths', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+
+    filepath = output_dir / "rf_chain_analysis.png"
+    fig.savefig(filepath, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"\nPlot saved to: {filepath}")
+
+    # Build config and results for PowerPoint
     rf_config = {
-        'chain_type': 'RX',
-        'frequency_ghz': config.freq_reference_ghz,
-        'n_components': len(rf.components),
-        'input_power_dbm': -60,
-        'damage_threshold_dbm': rf.damage_threshold_dbm,
-        'components': [
-            {
-                'name': c.name,
-                'type': c.type,
-                'gain_db': c.gain_db,
-                'noise_figure_db': c.noise_figure_db
-            }
-            for c in rf.components
-        ]
+        'chain_type': 'All Paths',
+        'n_rx_paths': sum(p['num_paths'] for p in rx_paths_list),
+        'n_tx_paths': sum(p['num_paths'] for p in tx_paths_list),
+        'paths': all_paths,
+        'rx_paths': rx_paths_list,
+        'tx_paths': tx_paths_list
     }
 
+    # Summary results (use primary RX path for legacy compatibility)
+    primary_rx = next((p for p in rx_paths_list if '2-18' in p['name']), rx_paths_list[0] if rx_paths_list else None)
     rf_results = {
-        'total_gain_db': rf.total_gain_db,
-        'cascade_nf_db': rf.cascade_noise_figure_db,
-        'output_power_dbm': -60 + rf.total_gain_db,
-        'saturated': False
+        'total_gain_db': primary_rx['total_gain_db'] if primary_rx else 0,
+        'cascade_nf_db': primary_rx['cascade_nf_db'] if primary_rx else 0,
+        'output_power_dbm': 0,
+        'saturated': False,
+        'all_paths': all_paths
     }
 
     return rf_config, rf_results
@@ -380,10 +535,16 @@ def get_adc_config():
 
 
 def get_antenna_config():
-    """Get antenna configuration from UAV config."""
+    """Get antenna configuration and run coverage analysis."""
     print_header("ANTENNA COVERAGE ANALYSIS")
 
     from antenna_coverage_analysis.config.loader import load_uav_config
+    from antenna_coverage_analysis import analyze_coverage
+    from pathlib import Path
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import numpy as np
 
     uav_config = load_uav_config()
 
@@ -398,6 +559,117 @@ def get_antenna_config():
     tx_low = [a for a in uav_config.tx_antennas if "<2" in a.freq_band]
     print(f"    - 2-18 GHz: {len(tx_2_18)}")
     print(f"    - <2 GHz:   {len(tx_low)}")
+
+    # Run coverage analysis
+    print("\nRunning coverage analysis...")
+    result = analyze_coverage(uav_config)
+    print(f"  Max gain: {result.max_gain_db:.1f} dBi")
+    print(f"  Min gain: {result.min_gain_db:.1f} dBi")
+    print(f"  Mean gain: {result.mean_gain_db:.1f} dBi")
+
+    # Generate and save plot
+    output_dir = Path(__file__).parent.parent / "antenna_coverage_analysis" / "output"
+    output_dir.mkdir(exist_ok=True)
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    AZ, EL = np.meshgrid(result.azimuth, result.elevation)
+
+    # Plot 1: 2D Coverage map
+    ax1 = axes[0, 0]
+    c = ax1.contourf(AZ, EL, result.coverage_db, levels=20, cmap='jet')
+    plt.colorbar(c, ax=ax1, label='Gain (dBi)')
+    ax1.set_xlabel('Azimuth (degrees)')
+    ax1.set_ylabel('Elevation (degrees)')
+    ax1.set_title('Combined RX Coverage Map - Max Gain (dBi)')
+    ax1.grid(True, alpha=0.3)
+    ax1.plot(0, 0, 'w*', markersize=15)
+    ax1.text(0, 5, 'Forward', color='white', ha='center', fontsize=10)
+
+    # Plot 2: Azimuth cut at elevation = 0
+    ax2 = axes[0, 1]
+    el_idx = np.argmin(np.abs(result.elevation))
+    ax2.plot(result.azimuth, result.coverage_db[el_idx, :], 'b-', linewidth=2)
+    ax2.set_xlabel('Azimuth (degrees)')
+    ax2.set_ylabel('Gain (dB)')
+    ax2.set_title('RX Coverage - Azimuth Cut (Elevation = 0°)')
+    ax2.set_xlim([-180, 180])
+    ax2.grid(True, alpha=0.3)
+    ax2.axhline(result.max_gain_db - 3, color='r', linestyle='--', label='-3 dB')
+    ax2.legend()
+
+    # Plot 3: Elevation cut at azimuth = 0
+    ax3 = axes[1, 0]
+    az_idx = np.argmin(np.abs(result.azimuth))
+    ax3.plot(result.elevation, result.coverage_db[:, az_idx], 'r-', linewidth=2)
+    ax3.set_xlabel('Elevation (degrees)')
+    ax3.set_ylabel('Gain (dB)')
+    ax3.set_title('RX Coverage - Elevation Cut (Azimuth = 0° - Forward)')
+    ax3.set_xlim([-90, 90])
+    ax3.grid(True, alpha=0.3)
+    ax3.axhline(result.max_gain_db - 3, color='b', linestyle='--', label='-3 dB')
+    ax3.legend()
+
+    # Plot 4: Antenna placement (RX and TX)
+    ax4 = axes[1, 1]
+    rx_ants = uav_config.rx_antennas
+    tx_ants = uav_config.tx_antennas
+
+    # Plot RX antennas by band
+    if rx_2_18:
+        pos = np.array([ant.position for ant in rx_2_18])
+        ax4.scatter(pos[:, 1], pos[:, 0], s=100, c='blue', marker='o',
+                    label=f'RX 2-18 GHz ({len(rx_2_18)})')
+    if rx_low:
+        pos = np.array([ant.position for ant in rx_low])
+        ax4.scatter(pos[:, 1], pos[:, 0], s=100, c='cyan', marker='s',
+                    label=f'RX <2 GHz ({len(rx_low)})')
+
+    # Plot TX antennas by band
+    if tx_2_18:
+        pos = np.array([ant.position for ant in tx_2_18])
+        ax4.scatter(pos[:, 1], pos[:, 0], s=150, c='red', marker='^',
+                    label=f'TX 2-18 GHz ({len(tx_2_18)})')
+    if tx_low:
+        pos = np.array([ant.position for ant in tx_low])
+        ax4.scatter(pos[:, 1], pos[:, 0], s=150, c='orange', marker='v',
+                    label=f'TX <2 GHz ({len(tx_low)})')
+
+    # Draw orientation arrows
+    for ant in rx_ants:
+        az_rad = np.radians(ant.orientation[0])
+        dx = 0.2 * np.sin(az_rad)
+        dy = 0.2 * np.cos(az_rad)
+        ax4.arrow(ant.position[1], ant.position[0], dx, dy,
+                  head_width=0.05, head_length=0.03, fc='blue', ec='blue', alpha=0.6)
+    for ant in tx_ants:
+        az_rad = np.radians(ant.orientation[0])
+        dx = 0.25 * np.sin(az_rad)
+        dy = 0.25 * np.cos(az_rad)
+        ax4.arrow(ant.position[1], ant.position[0], dx, dy,
+                  head_width=0.06, head_length=0.04, fc='red', ec='red', alpha=0.7)
+
+    ax4.set_xlabel('Y (Right) [m]')
+    ax4.set_ylabel('X (Forward) [m]')
+    ax4.set_title('Antenna Placement on UAV (RX & TX)')
+    ax4.grid(True, alpha=0.3)
+    ax4.axis('equal')
+    ax4.legend(loc='upper right', fontsize=8)
+
+    # UAV outline
+    uav_w = uav_config.uav_width / 2
+    uav_l = uav_config.uav_length / 2
+    rect = plt.Rectangle((-uav_w, -uav_l), 2*uav_w, 2*uav_l,
+                         fill=False, edgecolor='gray', linestyle='--', linewidth=2)
+    ax4.add_patch(rect)
+    ax4.annotate('FWD', xy=(0, uav_l + 0.1), ha='center', fontsize=10, fontweight='bold')
+
+    fig.suptitle(f'UAV Antenna Coverage Analysis ({uav_config.frequency_ghz:.0f} GHz)',
+                 fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    filepath = output_dir / "uav_coverage_analysis.png"
+    fig.savefig(filepath, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"\nPlot saved to: {filepath}")
 
     # Build RX antenna list
     rx_antennas_list = [
@@ -434,16 +706,15 @@ def get_antenna_config():
         'coverage_requirement': '360 deg azimuth, -60 to +30 deg elevation',
         'rx_antennas': rx_antennas_list,
         'tx_antennas': tx_antennas_list,
-        # Legacy field for backwards compatibility
         'antennas': rx_antennas_list
     }
 
-    # Max gain from TX horn antenna
-    max_gain = max((ant.gain_dbi for ant in uav_config.tx_antennas), default=2.0)
+    # Use actual analysis results
     ant_results = {
         'coverage_percentage': 95.0,
-        'min_gain_db': -8.5,
-        'max_gain_db': max_gain,
+        'min_gain_db': result.min_gain_db,
+        'max_gain_db': result.max_gain_db,
+        'mean_gain_db': result.mean_gain_db,
         'blind_spots': 2
     }
 
