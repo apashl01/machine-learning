@@ -82,3 +82,16 @@ Here is a prioritized list of updates to make the system more comprehensive and 
 **Action:**
 *   **Modify `generate_design_review.py`:** Update the script to accept an optional command-line argument or configuration parameter for a PowerPoint template file path (.potx or .pptx).
 *   **Apply Template:** When generating the PowerPoint, apply the specified template to the presentation to inherit its slide masters, layouts, and theme.
+
+### 8. Jamming Performance Analysis (New Capability)
+**Justification:** The system lacks analysis for its jamming capabilities. A previous capability allowed for analyzing jamming effectiveness over a trajectory, considering antenna patterns and power. This functionality needs to be restored and formalized.
+**Action:**
+*   **Correct Configuration:** Update `system_config.yaml` to correctly reflect the transmit and receive path hardware for the low-band:
+    *   Change `tx_low_band` `num_paths` from 2 to 1.
+    *   The now 'available' path (which was previously a second low-band TX path) should be configured as the `rx_low_band` path. This ensures a final configuration of one `tx_2_18ghz` path, one `tx_low_band` path, and one `rx_low_band` path.
+*   **Create `jamming_analysis` Module:** Develop a new Python module to analyze the standalone performance of each unique transmit chain (EIRP, Jamming-to-Signal Ratio capability vs Range).
+*   **Restore Trajectory Jamming Simulation:**
+    *   Integrate jamming effectiveness calculations into the `ekf_geolocation` or `demo` trajectory simulations.
+    *   Calculate J/S (Jamming-to-Signal) ratio at each time step based on the dynamic geometry between the jammer (platform) and the victim (emitter).
+    *   **Critical Input:** Use the `beamwidth_deg` and antenna orientation from `system_config.yaml` to apply a realistic gain pattern (e.g., Gaussian or Cosine-squared) instead of assuming isotropic radiation.
+    *   **Reference:** Refer to `jamming/jamming_effectiveness_analysis.m` (reference MATLAB file to be provided) for the specific algorithms and logic used in the legacy implementation.
