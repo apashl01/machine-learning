@@ -380,40 +380,70 @@ def get_adc_config():
 
 
 def get_antenna_config():
-    """Get antenna configuration from shared config."""
+    """Get antenna configuration from UAV config."""
     print_header("ANTENNA COVERAGE ANALYSIS")
 
-    from system_config import load_system_config
+    from antenna_coverage_analysis.config.loader import load_uav_config
 
-    config = load_system_config()
-    ant = config.antennas
+    uav_config = load_uav_config()
 
-    print(f"Using shared antenna config:")
-    print(f"  ESM antenna: {ant.esm_type}, {ant.esm_peak_gain_dbi} dBi")
-    print(f"  Platform antennas: {len(ant.platform_antennas)}")
+    print(f"Using UAV antenna config:")
+    print(f"  RX antennas: {uav_config.num_rx_antennas}")
+    rx_2_18 = [a for a in uav_config.rx_antennas if "2-18" in a.freq_band]
+    rx_low = [a for a in uav_config.rx_antennas if "<2" in a.freq_band]
+    print(f"    - 2-18 GHz: {len(rx_2_18)}")
+    print(f"    - <2 GHz:   {len(rx_low)}")
+    print(f"  TX antennas: {uav_config.num_tx_antennas}")
+    tx_2_18 = [a for a in uav_config.tx_antennas if "2-18" in a.freq_band]
+    tx_low = [a for a in uav_config.tx_antennas if "<2" in a.freq_band]
+    print(f"    - 2-18 GHz: {len(tx_2_18)}")
+    print(f"    - <2 GHz:   {len(tx_low)}")
 
-    antennas_list = [
+    # Build RX antenna list
+    rx_antennas_list = [
         {
-            'name': pa.name,
-            'type': pa.type,
-            'position': pa.position,
-            'orientation': f"{pa.orientation_deg} deg",
-            'peak_gain_dbi': pa.peak_gain_dbi
+            'name': ant.name,
+            'type': ant.antenna_type,
+            'position': f"[{ant.position[0]:.2f}, {ant.position[1]:.2f}, {ant.position[2]:.2f}]",
+            'orientation': f"{ant.orientation[0]}° az, {ant.orientation[1]}° el",
+            'peak_gain_dbi': ant.gain_dbi,
+            'freq_band': ant.freq_band
         }
-        for pa in ant.platform_antennas
+        for ant in uav_config.rx_antennas
+    ]
+
+    # Build TX antenna list
+    tx_antennas_list = [
+        {
+            'name': ant.name,
+            'type': ant.antenna_type,
+            'position': f"[{ant.position[0]:.2f}, {ant.position[1]:.2f}, {ant.position[2]:.2f}]",
+            'orientation': f"{ant.orientation[0]}° az, {ant.orientation[1]}° el",
+            'peak_gain_dbi': ant.gain_dbi,
+            'freq_band': ant.freq_band,
+            'beamwidth_deg': ant.beamwidth_deg
+        }
+        for ant in uav_config.tx_antennas
     ]
 
     ant_config = {
-        'n_antennas': len(ant.platform_antennas),
-        'frequency_ghz': config.freq_reference_ghz,
+        'n_rx_antennas': uav_config.num_rx_antennas,
+        'n_tx_antennas': uav_config.num_tx_antennas,
+        'n_antennas': uav_config.total_antennas,
+        'frequency_ghz': uav_config.frequency_ghz,
         'coverage_requirement': '360 deg azimuth, -60 to +30 deg elevation',
-        'antennas': antennas_list
+        'rx_antennas': rx_antennas_list,
+        'tx_antennas': tx_antennas_list,
+        # Legacy field for backwards compatibility
+        'antennas': rx_antennas_list
     }
 
+    # Max gain from TX horn antenna
+    max_gain = max((ant.gain_dbi for ant in uav_config.tx_antennas), default=2.0)
     ant_results = {
         'coverage_percentage': 95.0,
         'min_gain_db': -8.5,
-        'max_gain_db': ant.esm_peak_gain_dbi,
+        'max_gain_db': max_gain,
         'blind_spots': 2
     }
 

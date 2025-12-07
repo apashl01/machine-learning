@@ -23,8 +23,38 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
     gen.add_section_slide("Antenna Coverage Analysis",
                           "Pattern & Coverage Performance")
 
-    # Antenna inventory
-    if config and 'antennas' in config:
+    # RX Antenna inventory
+    if config and 'rx_antennas' in config:
+        rx_antennas = config['rx_antennas']
+        headers = ["Antenna", "Band", "Type", "Position", "Gain (dBi)"]
+        rows = []
+        for ant in rx_antennas:
+            rows.append([
+                ant.get('name', 'Unknown'),
+                ant.get('freq_band', '2-18 GHz'),
+                ant.get('type', 'N/A'),
+                ant.get('position', 'N/A'),
+                f"{ant.get('peak_gain_dbi', 0):.1f}"
+            ])
+        gen.add_table_slide(f"RX Antenna Inventory ({len(rx_antennas)} antennas)", headers, rows)
+
+    # TX Antenna inventory
+    if config and 'tx_antennas' in config:
+        tx_antennas = config['tx_antennas']
+        headers = ["Antenna", "Band", "Type", "Beamwidth", "Gain (dBi)"]
+        rows = []
+        for ant in tx_antennas:
+            rows.append([
+                ant.get('name', 'Unknown'),
+                ant.get('freq_band', '2-18 GHz'),
+                ant.get('type', 'N/A'),
+                f"{ant.get('beamwidth_deg', 0):.0f}°",
+                f"{ant.get('peak_gain_dbi', 0):.1f}"
+            ])
+        gen.add_table_slide(f"TX Antenna Inventory ({len(tx_antennas)} antennas)", headers, rows)
+
+    # Legacy antenna inventory (fallback)
+    elif config and 'antennas' in config:
         antennas = config['antennas']
         headers = ["Antenna", "Type", "Position", "Orientation", "Gain (dBi)"]
         rows = []
@@ -41,6 +71,10 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
     # Configuration bullets
     if config:
         overview_bullets = []
+        if 'n_rx_antennas' in config:
+            overview_bullets.append(f"RX Antennas: {config['n_rx_antennas']}")
+        if 'n_tx_antennas' in config:
+            overview_bullets.append(f"TX Antennas: {config['n_tx_antennas']}")
         if 'n_antennas' in config:
             overview_bullets.append(f"Total Antennas: {config['n_antennas']}")
         if 'frequency_ghz' in config:
