@@ -261,8 +261,8 @@ def run_esm_analysis():
     esm_config = {
         'frequency_range_ghz': [receiver.freq_min_hz/1e9, receiver.freq_max_hz/1e9],
         'sensitivity_dbm': sensitivity,
-        'scan_type': 'Frequency Hopping',
-        'revisit_rate_hz': 10
+        'instantaneous_bandwidth_ghz': receiver.instantaneous_bandwidth_ghz,
+        'scan_type': 'Frequency Scanning'
     }
 
     # Calculate max detection range for a typical threat
@@ -472,7 +472,7 @@ def generate_powerpoint(
     base_dir = Path(__file__).parent.parent
 
     add_esm_slides(gen, config=esm_config, results=esm_results,
-                   output_dir=str(base_dir / "esm_analysis/output"))
+                   output_dir=str(base_dir / "results"))
 
     add_rf_chain_slides(gen, config=rf_config, results=rf_results,
                         output_dir=str(base_dir / "rf_chain_analysis/output"))
