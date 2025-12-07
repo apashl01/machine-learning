@@ -37,10 +37,16 @@ In essence, this project functions as a Model-Based Systems Engineering (MBSE) t
 Here is a prioritized list of updates to make the system more comprehensive and cohesive for Electronic Warfare system analysis:
 
 ### 1. Implement Pulse Parameter Measurement Analysis (High Priority)
-**Justification:** An EW system's primary function is not just to detect but to accurately characterize emitter pulses for identification and threat assessment. The current framework only models detection.
+**Justification:** An EW system's primary function is not just to detect but to accurately characterize emitter pulses. The current framework only models detection. The analysis must account for the specific digital signal processing chain (High-Speed ADC $\rightarrow$ DDC $\rightarrow$ Narrowband Channelizer) and the specific measurement algorithms used (e.g., DLFM).
 **Action:**
-*   **Expand `esm_analysis`:** Add new modules or functions within `esm_analysis` to calculate the measurement accuracy of key pulse parameters (e.g., Frequency, Pulse Width, Pulse Repetition Interval (PRI), Time of Arrival (TOA)) as a function of Signal-to-Noise Ratio (SNR). This typically involves using Cramer-Rao Lower Bound (CRLB) models or similar techniques.
-*   **Outputs:** The analysis should produce plots or data indicating expected measurement error vs. SNR for various pulse types and conditions.
+*   **Update `system_config.yaml`:** Explicitly define the bandwidth hierarchy: `adc_sample_rate_gsps` (40+), `instantaneous_bandwidth_ghz` (1.0), and `channel_bandwidth_mhz` (20.0).
+*   **Expand `esm_analysis`:** Add a `MeasurementAccuracy` module that models the specific signal chain:
+    *   **Noise Rejection (Process Gain):** Calculate effective SNR at the measurement point (e.g., 20 MHz channel) by adding noise rejection gain: $10 \log_{10}(BW_{adc}/BW_{channel})$. *Note: Explicitly distinguish this from coherent integration gain; we are rejecting noise, not summing signal.*
+*   **Apply Specific Error Models:**
+    *   **Frequency Accuracy (DLFM):** Model using **Delay Line Frequency Measurement** physics. Accuracy $\propto \frac{1}{SNR \cdot \tau_{delay}}$. Longer delays improve accuracy but risk ambiguity.
+    *   **Time of Arrival (TOA):** Model as a function of **Channel Bandwidth** (Rise Time) and SNR. Explicitly account for the degradation in timing resolution due to the 20 MHz bandwidth limiting, despite the high ADC rate.
+    *   **Pulse Width:** Derived from the variance of two TOA measurements ($\sigma_{PW} \approx \sqrt{2} \cdot \sigma_{TOA}$). 
+*   **Outputs:** Produce plots of "RMS Error vs. Input SNR" for each parameter, clearly showing the system's limit of precision.
 
 ### 2. Create a `system_requirements` Module and Compliance Matrix (High Priority)
 **Justification:** To transition from a "simulation tool" to a "verification tool", the project needs a formal way to define and check against system-level performance requirements.
