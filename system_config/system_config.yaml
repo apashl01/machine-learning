@@ -48,6 +48,112 @@ adc:
 # =============================================================================
 # RF CHAIN CONFIGURATION
 # =============================================================================
+rf_chains:
+  # -------------------------------------------------------------------------
+  # RECEIVE PATHS
+  # -------------------------------------------------------------------------
+  rx_paths:
+    # Primary RX (2-18 GHz) - 7 paths
+    rx_2_18ghz:
+      name: "Primary RX (2-18 GHz)"
+      num_paths: 7
+      freq_range_ghz: [2.0, 18.0]
+      cascade_noise_figure_db: 3.5
+      total_gain_db: 30.0
+      damage_threshold_dbm: 10
+      components:
+        - name: "Spiral Antenna"
+          type: "spiral"
+          gain_db: 5.0
+          noise_figure_db: 0.0
+        - name: "LNA"
+          type: "amplifier"
+          gain_db: 25.0
+          noise_figure_db: 1.5
+        - name: "Cable"
+          type: "coax"
+          gain_db: -2.0
+          noise_figure_db: 2.0
+        - name: "Filter"
+          type: "bandpass"
+          gain_db: -1.5
+          noise_figure_db: 1.5
+
+    # Low-band RX (<2 GHz) - 1 path
+    rx_low_band:
+      name: "Low-Band RX (<2 GHz)"
+      num_paths: 1
+      freq_range_ghz: [0.5, 2.0]
+      cascade_noise_figure_db: 4.0
+      total_gain_db: 35.0
+      damage_threshold_dbm: 15
+      components:
+        - name: "Wideband Antenna"
+          type: "dipole"
+          gain_db: 2.0
+          noise_figure_db: 0.0
+        - name: "LNA"
+          type: "amplifier"
+          gain_db: 30.0
+          noise_figure_db: 2.0
+        - name: "Cable"
+          type: "coax"
+          gain_db: -1.0
+          noise_figure_db: 1.0
+
+  # -------------------------------------------------------------------------
+  # TRANSMIT PATHS
+  # -------------------------------------------------------------------------
+  tx_paths:
+    # Primary TX (2-18 GHz) - 1 path, narrow beam
+    tx_2_18ghz:
+      name: "Primary TX (2-18 GHz)"
+      num_paths: 1
+      freq_range_ghz: [2.0, 18.0]
+      source_power_dbm: 0
+      total_gain_db: 45.0
+      components:
+        - name: "Driver Amp"
+          type: "amplifier"
+          gain_db: 20.0
+          psat_dbm: 20
+        - name: "Cable"
+          type: "coax"
+          gain_db: -2.0
+        - name: "PA"
+          type: "amplifier"
+          gain_db: 15.0
+          psat_dbm: 35
+        - name: "Horn Antenna"
+          type: "horn"
+          gain_db: 12.0
+          beamwidth_deg: 30.0
+
+    # Low-band TX (<2 GHz) - 2 paths, wide beam
+    tx_low_band:
+      name: "Low-Band TX (<2 GHz)"
+      num_paths: 2
+      freq_range_ghz: [0.5, 2.0]
+      source_power_dbm: 0
+      total_gain_db: 30.0
+      components:
+        - name: "Driver Amp"
+          type: "amplifier"
+          gain_db: 25.0
+          psat_dbm: 25
+        - name: "Cable"
+          type: "coax"
+          gain_db: -1.5
+        - name: "PA"
+          type: "amplifier"
+          gain_db: 10.0
+          psat_dbm: 30
+        - name: "Omni Antenna"
+          type: "omni"
+          gain_db: -2.0
+          beamwidth_deg: 360.0
+
+# Legacy single-chain reference (for backwards compatibility)
 rf_chain:
   # Cascade noise figure (from rf_chain_analysis or measured)
   cascade_noise_figure_db: 3.5    # Total system NF

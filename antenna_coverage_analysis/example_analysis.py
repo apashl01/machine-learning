@@ -32,13 +32,20 @@ def main():
 
     print(f"\nUAV Configuration:")
     print(f"  Frequency: {config.frequency_ghz:.2f} GHz")
-    print(f"  Number of antennas: {config.num_antennas}")
+    print(f"  RX Antennas: {config.num_rx_antennas}")
+    print(f"  TX Antennas: {config.num_tx_antennas}")
     print(f"  Spiral beamwidth: {config.spiral_antenna.beamwidth_deg}°")
     print(f"  Spiral gain: {config.spiral_antenna.gain_dbi} dBi")
 
-    print("\nAntenna Positions:")
-    for ant in config.antennas:
-        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}°")
+    print("\nRX Antenna Positions:")
+    for ant in config.rx_antennas:
+        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}°, "
+              f"band={ant.freq_band}")
+
+    print("\nTX Antenna Positions:")
+    for ant in config.tx_antennas:
+        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}°, "
+              f"band={ant.freq_band}, gain={ant.gain_dbi} dBi")
 
     # Analyze coverage
     print("\nCalculating combined coverage...")
@@ -98,31 +105,71 @@ def generate_plots(result):
 
     # Plot 4: Antenna placement visualization
     ax4 = axes[1, 1]
-    positions = np.array([ant.position for ant in result.config.antennas])
-    ax4.scatter(positions[:, 1], positions[:, 0], s=100, c='red',
-                marker='o', label='RX Antennas')
 
-    # Draw orientation arrows
-    for i, ant in enumerate(result.config.antennas):
-        az_rad = np.radians(ant.orientation[0])
-        dx = 0.2 * np.sin(az_rad)
-        dy = 0.2 * np.cos(az_rad)
-        ax4.arrow(ant.position[1], ant.position[0], dx, dy,
-                  head_width=0.05, head_length=0.03, fc='blue', ec='blue')
+    # Plot RX antennas (use rx_antennas if available, else legacy antennas)
+    rx_ants = result.config.rx_antennas if result.config.rx_antennas else result.config.antennas
+    if rx_ants:
+        rx_positions = np.array([ant.position for ant in rx_ants])
+        # Separate by frequency band
+        rx_2_18 = [ant for ant in rx_ants if "2-18" in ant.freq_band]
+        rx_low = [ant for ant in rx_ants if "<2" in ant.freq_band or "low" in ant.freq_band.lower()]
+
+        if rx_2_18:
+            pos_2_18 = np.array([ant.position for ant in rx_2_18])
+            ax4.scatter(pos_2_18[:, 1], pos_2_18[:, 0], s=100, c='blue',
+                        marker='o', label=f'RX 2-18 GHz ({len(rx_2_18)})')
+        if rx_low:
+            pos_low = np.array([ant.position for ant in rx_low])
+            ax4.scatter(pos_low[:, 1], pos_low[:, 0], s=100, c='cyan',
+                        marker='s', label=f'RX <2 GHz ({len(rx_low)})')
+
+        # Draw RX orientation arrows
+        for ant in rx_ants:
+            az_rad = np.radians(ant.orientation[0])
+            dx = 0.2 * np.sin(az_rad)
+            dy = 0.2 * np.cos(az_rad)
+            ax4.arrow(ant.position[1], ant.position[0], dx, dy,
+                      head_width=0.05, head_length=0.03, fc='blue', ec='blue', alpha=0.6)
+
+    # Plot TX antennas
+    tx_ants = result.config.tx_antennas
+    if tx_ants:
+        tx_2_18 = [ant for ant in tx_ants if "2-18" in ant.freq_band]
+        tx_low = [ant for ant in tx_ants if "<2" in ant.freq_band or "low" in ant.freq_band.lower()]
+
+        if tx_2_18:
+            pos_2_18 = np.array([ant.position for ant in tx_2_18])
+            ax4.scatter(pos_2_18[:, 1], pos_2_18[:, 0], s=150, c='red',
+                        marker='^', label=f'TX 2-18 GHz ({len(tx_2_18)})')
+        if tx_low:
+            pos_low = np.array([ant.position for ant in tx_low])
+            ax4.scatter(pos_low[:, 1], pos_low[:, 0], s=150, c='orange',
+                        marker='v', label=f'TX <2 GHz ({len(tx_low)})')
+
+        # Draw TX orientation arrows
+        for ant in tx_ants:
+            az_rad = np.radians(ant.orientation[0])
+            dx = 0.25 * np.sin(az_rad)
+            dy = 0.25 * np.cos(az_rad)
+            ax4.arrow(ant.position[1], ant.position[0], dx, dy,
+                      head_width=0.06, head_length=0.04, fc='red', ec='red', alpha=0.7)
 
     ax4.set_xlabel('Y (Right) [m]')
     ax4.set_ylabel('X (Forward) [m]')
-    ax4.set_title('Antenna Placement on UAV')
+    ax4.set_title('Antenna Placement on UAV (RX & TX)')
     ax4.grid(True, alpha=0.3)
     ax4.axis('equal')
-    ax4.legend()
+    ax4.legend(loc='upper right', fontsize=8)
 
     # Add UAV outline (simple rectangle)
     uav_w = result.config.uav_width / 2
     uav_l = result.config.uav_length / 2
     rect = plt.Rectangle((-uav_w, -uav_l), 2*uav_w, 2*uav_l,
-                         fill=False, edgecolor='gray', linestyle='--')
+                         fill=False, edgecolor='gray', linestyle='--', linewidth=2)
     ax4.add_patch(rect)
+
+    # Add forward direction indicator
+    ax4.annotate('FWD', xy=(0, uav_l + 0.1), ha='center', fontsize=10, fontweight='bold')
 
     fig.suptitle(f'UAV Antenna Coverage Analysis ({result.config.frequency_ghz:.0f} GHz)',
                  fontsize=14, fontweight='bold')
