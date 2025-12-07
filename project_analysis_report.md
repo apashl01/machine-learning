@@ -49,11 +49,19 @@ Here is a prioritized list of updates to make the system more comprehensive and 
 *   **Integrate Checker:** Develop a Python module to load these requirements and compare them against the calculated performance from `esm_analysis`, `direction_finding_analysis`, `ekf_geolocation`, etc.
 *   **Reporting:** Update `reporting/generate_design_review.py` to include a "Compliance Matrix" that explicitly shows a Pass/Fail status for each requirement, along with the calculated value.
 
-### 3. Integrate ADC Spurious Performance into False Alarm Analysis (Medium Priority)
-**Justification:** High Spurious-Free Dynamic Range (SFDR) is critical for EW systems to minimize false alarms caused by internally generated spurs appearing as real signals. `adc_analysis` computes SFDR, but `esm_analysis` doesn't currently leverage this for false alarm prediction.
+### 3. Integrate ADC Spurious Performance & Distinguish False Alarm Types (Medium Priority)
+**Justification:** A robust analysis must distinguish between *statistical* false alarms (noise) and *deterministic* false alarms (hardware artifacts).
 **Action:**
-*   **Enhance `system_config`:** Ensure the `system_config` properly propagates ADC SFDR from `adc_analysis` results or configuration.
-*   **Update `esm_analysis`:** Implement logic within `esm_analysis` to identify potential false alarms or masking scenarios due to ADC spurs. This could involve checking if a spur, calculated as `Signal Power - SFDR`, could exceed the detection threshold.
+*   **Statistical False Alarm Rate (FAR) Analysis:**
+    *   **Threshold Setting:** The analysis should explicitly account for the threshold being set a certain dB level *above the noise floor* (e.g., in `esm_analysis`), which is a common technique to manage and reduce the statistical false alarm rate.
+    *   **Question:** "How low can I set my threshold to see weak signals without random noise triggering detection?"
+    *   **Driver:** Thermal Noise Floor (from `rf_chain`), Receiver Bandwidth, Integration Time, and the specific Threshold setting relative to the noise floor.
+    *   **Metric:** "Sensitivity at target $P_{fa}$ (e.g., $10^{-6}$ false alarms per second)."
+*   **Deterministic Spurious Analysis (Dynamic Range):**
+    *   **New Logic:** Implement a specific check for **High-Power False Alarms** driven by ADC SFDR.
+    *   **Scenario:** When a strong signal is present (e.g., a jammer or nearby radar), calculate the magnitude of generated spurs (`Signal Power - SFDR`).
+    *   **Failure Condition:** If `Spur Power > Detection Threshold`, report a **"Spurious False Alarm"**.
+    *   **Metric:** Report "Instantaneous Dynamic Range" — the power range between the Sensitivity floor and the level where spurs become visible.
 
 ### 4. Refine Unified Sensitivity and Noise Modeling (Medium Priority)
 **Justification:** While `esm_analysis` and `direction_finding_analysis` currently fetch noise figures from `rf_chain`, ensuring a truly unified and consistent approach, especially considering ADC quantization noise contributions, is crucial.
