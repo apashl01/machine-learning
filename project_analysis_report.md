@@ -66,3 +66,13 @@ Here is a prioritized list of updates to make the system more comprehensive and 
 **Action:**
 *   **New Module:** Consider a new module or extension to `esm_analysis` to model pulse density effects.
 *   **Metrics:** Calculate metrics such as `probability_of_intercept` given a specific pulse density, `pulse_desensitization` due to high instantaneous pulse rates, and `processing_latency`. This would involve defining a simplified model for the receiver's instantaneous bandwidth and processing capabilities.
+
+### 6. Refactor RF Chain Management Strategy (Architectural Improvement)
+**Justification:** The current system defines RF paths individually or in simple groups. As the complexity grows (e.g., different cable lengths for different array elements, or manufacturing tolerances), a more robust "Library & Archetype" pattern is needed to avoid configuration duplication and errors.
+**Action:**
+*   **Refactor `rf_chains.yaml`:**
+    *   **Component Library:** Ensure *every* unique hardware component (e.g., "LNA Type A", "Cable 1m") is defined strictly in the `components` section.
+    *   **Chain Archetypes:** Define chain configurations (e.g., "Standard Channel", "Long-Cable Channel") solely by referencing components from the library. Do not define component parameters inline within a chain definition.
+*   **Update `system_config.yaml`:**
+    *   Implement a mapping structure that assigns physical path IDs (e.g., "RX_Channel_1" through "RX_Channel_4") to specific Chain Archetypes defined in `rf_chains.yaml`.
+    *   This allows for handling "groups" of identical paths while easily accommodating single paths with unique variances (e.g., "RX_Channel_4" uses "Long-Cable Channel" archetype).
