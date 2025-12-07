@@ -79,15 +79,6 @@ def add_esm_slides(gen: DesignReviewGenerator,
                 image_width=10.0
             )
 
-        # Monte Carlo
-        monte_carlo_plot = output_path / "03_monte_carlo.png"
-        if monte_carlo_plot.exists():
-            gen.add_content_slide(
-                "Monte Carlo Analysis",
-                image_path=str(monte_carlo_plot),
-                image_width=10.0
-            )
-
         # Dwell schedule
         dwell_plot = output_path / "04_dwell_schedule.png"
         if dwell_plot.exists():
