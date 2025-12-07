@@ -76,3 +76,9 @@ Here is a prioritized list of updates to make the system more comprehensive and 
 *   **Update `system_config.yaml`:**
     *   Implement a mapping structure that assigns physical path IDs (e.g., "RX_Channel_1" through "RX_Channel_4") to specific Chain Archetypes defined in `rf_chains.yaml`.
     *   This allows for handling "groups" of identical paths while easily accommodating single paths with unique variances (e.g., "RX_Channel_4" uses "Long-Cable Channel" archetype).
+
+### 7. Optional PowerPoint Template for Design Review (Reporting Enhancement)
+**Justification:** To provide greater flexibility and control over the generated design review's aesthetics and branding, allowing users to specify a custom PowerPoint template is essential.
+**Action:**
+*   **Modify `generate_design_review.py`:** Update the script to accept an optional command-line argument or configuration parameter for a PowerPoint template file path (.potx or .pptx).
+*   **Apply Template:** When generating the PowerPoint, apply the specified template to the presentation to inherit its slide masters, layouts, and theme.
