@@ -129,10 +129,10 @@ rf_chains:
           gain_db: 12.0
           beamwidth_deg: 30.0
 
-    # Low-band TX (<2 GHz) - 2 paths, wide beam
+    # Low-band TX (<2 GHz) - 1 path, wide beam
     tx_low_band:
       name: "Low-Band TX (<2 GHz)"
-      num_paths: 2
+      num_paths: 1
       freq_range_ghz: [0.5, 2.0]
       source_power_dbm: 0
       total_gain_db: 30.0

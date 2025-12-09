@@ -63,6 +63,7 @@ class ReceiverParameters:
     bandwidth_MHz: float = 20.0     # Analysis/channelizer bandwidth (MHz)
     snr_required_dB: float = 13.0   # Required SNR for detection (dB)
     system_loss_dB: float = 6.0     # Total system losses (dB)
+    pfa: float = 1e-6               # Probability of false alarm (default 10^-6)
 
     # Scan parameters
     freq_min_GHz: float = 2.0       # Minimum scan frequency (GHz)
@@ -222,8 +223,8 @@ class ESMDetector:
 
         # Albersheim's approximation for Pd
         # Pd = 0.5 * erfc(sqrt(-ln(Pfa)) - sqrt(SNR + 0.5))
-        # Assuming Pfa = 1e-6
-        pfa = 1e-6
+        # Uses configurable Pfa from receiver parameters
+        pfa = self.receiver.pfa
 
         if effective_snr <= 0:
             return 0.0

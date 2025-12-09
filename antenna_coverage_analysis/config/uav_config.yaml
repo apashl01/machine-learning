@@ -92,17 +92,9 @@ tx_antennas:
     beamwidth_deg: 30
     gain_dbi: 12
 
-  # <2 GHz TX - Wide beam/omni, wing-mounted (2 antennas)
-  - name: "TX Left Wing (<2 GHz)"
+  # <2 GHz TX - Wide beam/omni, wing-mounted (1 antenna)
+  - name: "TX Low-Band (<2 GHz)"
     position: [-0.4, -1.0, 0.0]   # Left wing
-    orientation: [0, 0]           # Pointing forward (positive X)
-    freq_band: "<2 GHz"
-    type: "omni"
-    beamwidth_deg: 360
-    gain_dbi: -2
-
-  - name: "TX Right Wing (<2 GHz)"
-    position: [-0.4, 1.0, 0.0]    # Right wing
     orientation: [0, 0]           # Pointing forward (positive X)
     freq_band: "<2 GHz"
     type: "omni"

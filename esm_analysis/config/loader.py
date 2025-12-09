@@ -35,6 +35,7 @@ class ReceiverConfig:
     instantaneous_bandwidth_ghz: float = 1.0  # IBW for scanning (1 GHz)
     system_losses_db: float = 3.0
     snr_threshold_db: float = 10.0
+    pfa: float = 1e-6  # Probability of false alarm (default 10^-6)
     tune_time_us: float = 50.0
     settling_time_us: float = 10.0
 
@@ -339,6 +340,7 @@ def _parse_receiver_config(data: dict) -> ReceiverConfig:
         instantaneous_bandwidth_ghz=_to_float(data.get('instantaneous_bandwidth_ghz'), 1.0),
         system_losses_db=_to_float(data.get('system_losses_db'), 3.0),
         snr_threshold_db=_to_float(data.get('snr_threshold_db'), 10.0),
+        pfa=_to_float(data.get('pfa'), 1e-6),
         tune_time_us=_to_float(data.get('tune_time_us'), 50.0),
         settling_time_us=_to_float(data.get('settling_time_us'), 10.0)
     )

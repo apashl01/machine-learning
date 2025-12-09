@@ -728,14 +728,16 @@ def generate_powerpoint(
     esm_config, esm_results,
     rf_config, rf_results,
     adc_config, adc_results,
-    ant_config, ant_results
+    ant_config, ant_results,
+    template: str = None
 ):
     """Generate the PowerPoint with real results."""
     print_header("GENERATING POWERPOINT")
 
     gen = DesignReviewGenerator(
         title="EW System Design Review",
-        author="Analysis Team"
+        author="Analysis Team",
+        template=template
     )
 
     # Title slide
@@ -825,10 +827,26 @@ def generate_powerpoint(
 
 def main():
     """Main entry point - one click to run everything."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Generate EW System Design Review PowerPoint"
+    )
+    parser.add_argument(
+        "--template", "-t",
+        type=str,
+        default=None,
+        help="Path to PowerPoint template file (.pptx or .potx)"
+    )
+    args = parser.parse_args()
+
     print("=" * 70)
     print(" ONE-CLICK DESIGN REVIEW GENERATOR")
     print(" Using Shared System Configuration")
     print("=" * 70)
+
+    if args.template:
+        print(f"\nTemplate: {args.template}")
 
     # Load shared system config
     sys_config, noise_result = run_system_config_summary()
@@ -851,7 +869,8 @@ def main():
         esm_config, esm_results,
         rf_config, rf_results,
         adc_config, adc_results,
-        ant_config, ant_results
+        ant_config, ant_results,
+        template=args.template
     )
 
     print_header("COMPLETE")

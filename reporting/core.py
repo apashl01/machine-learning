@@ -54,23 +54,34 @@ class DesignReviewGenerator:
         gen.add_section_slide("RF Chain Analysis")
         gen.add_content_slide("Link Budget", bullets=[...], image_path="plot.png")
         gen.save("design_review.pptx")
+
+        # With template:
+        gen = DesignReviewGenerator("EW System Design Review", template="template.pptx")
     """
 
-    def __init__(self, title: str, author: str = "Analysis Team"):
+    def __init__(self, title: str, author: str = "Analysis Team",
+                 template: Optional[str] = None):
         """
         Initialize the design review generator.
 
         Args:
             title: Presentation title
             author: Author/team name
+            template: Optional path to PowerPoint template (.pptx or .potx)
         """
         self.title = title
         self.author = author
-        self.prs = Presentation()
+        self.template = template
 
-        # Set slide dimensions to widescreen
-        self.prs.slide_width = SLIDE_WIDTH
-        self.prs.slide_height = SLIDE_HEIGHT
+        # Load template if provided, otherwise create blank presentation
+        if template and Path(template).exists():
+            self.prs = Presentation(template)
+            print(f"Using PowerPoint template: {template}")
+        else:
+            self.prs = Presentation()
+            # Set slide dimensions to widescreen (only for blank presentations)
+            self.prs.slide_width = SLIDE_WIDTH
+            self.prs.slide_height = SLIDE_HEIGHT
 
         self.slide_count = 0
 
