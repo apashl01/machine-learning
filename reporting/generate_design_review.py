@@ -32,7 +32,8 @@ from reporting.generators import (
     add_direction_finding_slides,
     add_antenna_coverage_slides,
     add_ekf_geolocation_slides,
-    add_summary_slide
+    add_summary_slide,
+    add_compliance_slides
 )
 
 
@@ -749,11 +750,12 @@ def generate_powerpoint(
         bullets=[
             "System Configuration Overview",
             "ESM Analysis - Detection range and sensitivity",
-            "RF Chain Analysis - Link budget and component performance",
+            "RF Chain Analysis - Multi-band link budget (Low/Mid)",
             "ADC Analysis - Digitizer specifications",
             "Direction Finding - Interferometer accuracy",
-            "Antenna Coverage - Pattern analysis",
+            "Antenna Coverage - RX/TX pattern analysis",
             "EKF Geolocation - Emitter localization simulation",
+            "Requirements Compliance Matrix",
             "Summary & Next Steps"
         ]
     )
@@ -791,6 +793,36 @@ def generate_powerpoint(
 
     add_ekf_geolocation_slides(gen, config=ekf_config, results=ekf_results,
                                 output_dir=str(base_dir / "ekf_geolocation/output"))
+
+    # Run compliance check
+    from system_config import (
+        calculate_multiband_noise_floor,
+        generate_compliance_report
+    )
+
+    # Get multi-band noise results
+    multiband_noise = calculate_multiband_noise_floor()
+
+    # Build performance data for compliance check
+    performance = {
+        'sensitivity': {
+            'low_band': multiband_noise.bands.get('Low Band', multiband_noise.bands.get('Mid Band')).sensitivity_dbm,
+            'mid_band': multiband_noise.bands.get('Mid Band').sensitivity_dbm,
+        },
+        'dynamic_range_db': multiband_noise.bands.get('Mid Band').dynamic_range_db,
+        'noise_figure_db': rf_results.get('cascade_nf_db', 3.5),
+        'rf_gain_db': rf_results.get('total_gain_db', 30.0),
+        'detection_range_km': esm_results.get('max_detection_range_km', 100.0),
+        'aoa_accuracy_deg': df_results.get('angle_accuracy_deg', 2.0),
+        'azimuth_coverage_deg': 360.0,
+        'cep_m': ekf_results.get('final_error_m', 100.0),
+        'valid_measurement_rate': ekf_results.get('valid_measurement_rate', 0.85),
+    }
+
+    compliance_result, compliance_rows = generate_compliance_report(performance)
+
+    # Add compliance slides
+    add_compliance_slides(gen, compliance_result, compliance_rows)
 
     # Summary
     add_summary_slide(

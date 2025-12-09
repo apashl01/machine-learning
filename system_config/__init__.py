@@ -29,7 +29,16 @@ from .loader import (
 from .noise import (
     calculate_system_noise_floor,
     calculate_sensitivity,
-    NoiseFloorResult
+    calculate_multiband_noise_floor,
+    NoiseFloorResult,
+    MultiBandNoiseResult
+)
+from .compliance import (
+    check_compliance,
+    load_requirements,
+    generate_compliance_report,
+    ComplianceResult,
+    RequirementCheck
 )
 
 __all__ = [
@@ -41,5 +50,12 @@ __all__ = [
     'AntennaConfig',
     'calculate_system_noise_floor',
     'calculate_sensitivity',
-    'NoiseFloorResult'
+    'calculate_multiband_noise_floor',
+    'NoiseFloorResult',
+    'MultiBandNoiseResult',
+    'check_compliance',
+    'load_requirements',
+    'generate_compliance_report',
+    'ComplianceResult',
+    'RequirementCheck'
 ]

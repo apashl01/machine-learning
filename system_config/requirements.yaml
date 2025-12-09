@@ -1,0 +1,106 @@
+# EW System Performance Requirements
+# These define Pass/Fail criteria for design review compliance
+
+# =============================================================================
+# SENSITIVITY & DETECTION REQUIREMENTS
+# =============================================================================
+detection:
+  # Minimum detectable signal level
+  sensitivity_dbm:
+    low_band: -85.0      # <2 GHz band
+    mid_band: -85.0      # 2-18 GHz band
+
+  # Required probability of detection at sensitivity level
+  probability_of_detection: 0.90
+
+  # Maximum acceptable false alarm rate (per second)
+  max_false_alarm_rate: 1.0e-6
+
+  # Detection range requirements (km)
+  detection_range_km:
+    min: 50.0            # Minimum detection range
+    typical: 100.0       # Typical operating range
+    max: 200.0           # Extended range goal
+
+# =============================================================================
+# MEASUREMENT ACCURACY REQUIREMENTS
+# =============================================================================
+measurement:
+  # Frequency measurement
+  frequency_accuracy_mhz: 1.0        # RMS accuracy
+  frequency_resolution_mhz: 0.1      # Minimum resolution
+
+  # Direction finding / AOA
+  aoa_accuracy_deg: 2.0              # RMS AOA accuracy
+  aoa_coverage_deg: 360.0            # Azimuth coverage
+
+  # Time of arrival
+  toa_accuracy_ns: 10.0              # RMS TOA accuracy
+
+  # Pulse width measurement
+  pulse_width_accuracy_percent: 10.0  # % of actual PW
+
+# =============================================================================
+# GEOLOCATION REQUIREMENTS
+# =============================================================================
+geolocation:
+  # Position accuracy after convergence
+  cep_m: 100.0                       # Circular Error Probable (50%)
+  cep_90_m: 200.0                    # 90% containment radius
+
+  # Convergence requirements
+  convergence_time_s: 60.0           # Time to achieve CEP
+  min_measurements: 10               # Min measurements before reporting
+
+  # Valid measurement rate
+  min_valid_measurement_rate: 0.80   # 80% of measurements must be valid
+
+# =============================================================================
+# DYNAMIC RANGE REQUIREMENTS
+# =============================================================================
+dynamic_range:
+  # Total instantaneous dynamic range
+  instantaneous_db: 60.0
+
+  # Spurious-free dynamic range (SFDR)
+  sfdr_db: 65.0
+
+  # Input damage threshold
+  damage_threshold_dbm: 10.0
+
+# =============================================================================
+# COVERAGE REQUIREMENTS
+# =============================================================================
+coverage:
+  # Frequency coverage
+  freq_min_ghz: 0.5
+  freq_max_ghz: 18.0
+
+  # Antenna coverage (minimum gain threshold)
+  azimuth_coverage_deg: 360.0
+  elevation_min_deg: -60.0
+  elevation_max_deg: 30.0
+  min_antenna_gain_dbi: -10.0        # Minimum gain for coverage
+
+# =============================================================================
+# SCAN/DWELL REQUIREMENTS
+# =============================================================================
+scanning:
+  # Maximum time to revisit any frequency
+  max_revisit_time_ms: 100.0
+
+  # Probability of intercept requirements
+  poi_percent: 95.0                  # 95% POI target
+
+  # Instantaneous bandwidth
+  instantaneous_bandwidth_ghz: 1.0
+
+# =============================================================================
+# RF CHAIN REQUIREMENTS
+# =============================================================================
+rf_chain:
+  # Maximum acceptable noise figure
+  max_noise_figure_db: 5.0
+
+  # Minimum gain
+  min_gain_db: 20.0

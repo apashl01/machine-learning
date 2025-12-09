@@ -10,11 +10,14 @@ Provides:
 - Frequency-dependent noise floor
 - System sensitivity
 - Dynamic range
+- Multi-band (Low/Mid) noise floor calculations
 """
 
 import numpy as np
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, List
+from pathlib import Path
+import yaml
 
 from .loader import SystemConfig
 
@@ -37,10 +40,11 @@ class NoiseFloorResult:
     frequency_ghz: float
     bandwidth_hz: float
     snr_required_db: float
+    band_name: str = "default"        # Band identifier (e.g., "Low", "Mid")
 
     def print_summary(self):
         """Print noise floor summary."""
-        print(f"\nNoise Floor Analysis at {self.frequency_ghz:.2f} GHz:")
+        print(f"\nNoise Floor Analysis - {self.band_name} Band at {self.frequency_ghz:.2f} GHz:")
         print(f"  Bandwidth: {self.bandwidth_hz/1e6:.1f} MHz")
         print(f"  Thermal Noise (kTB): {self.thermal_noise_dbm:.1f} dBm")
         print(f"  After RF Chain NF: {self.rf_chain_noise_dbm:.1f} dBm")
@@ -48,6 +52,24 @@ class NoiseFloorResult:
         print(f"  System Noise Floor: {self.system_noise_floor_dbm:.1f} dBm")
         print(f"  Sensitivity (SNR={self.snr_required_db}dB): {self.sensitivity_dbm:.1f} dBm")
         print(f"  Dynamic Range: {self.dynamic_range_db:.1f} dB")
+
+
+@dataclass
+class MultiBandNoiseResult:
+    """Result of multi-band noise floor calculation."""
+    bands: Dict[str, NoiseFloorResult]
+
+    def print_summary(self):
+        """Print multi-band noise summary."""
+        print("\n" + "="*60)
+        print("MULTI-BAND NOISE FLOOR SUMMARY")
+        print("="*60)
+        for name, result in self.bands.items():
+            print(f"\n{name}:")
+            print(f"  Freq Range: {result.frequency_ghz:.1f} GHz")
+            print(f"  Noise Floor: {result.system_noise_floor_dbm:.1f} dBm")
+            print(f"  Sensitivity: {result.sensitivity_dbm:.1f} dBm")
+            print(f"  Dynamic Range: {result.dynamic_range_db:.1f} dB")
 
 
 def calculate_thermal_noise_dbm(bandwidth_hz: float, temperature_k: float = T_REFERENCE) -> float:
@@ -226,3 +248,89 @@ def calculate_noise_floor_vs_frequency(
         noise_floors[i] = result.system_noise_floor_dbm
 
     return noise_floors
+
+
+def calculate_multiband_noise_floor(
+    bandwidth_hz: float = 20e6,
+    snr_required_db: float = 10.0
+) -> MultiBandNoiseResult:
+    """
+    Calculate noise floor for all RX bands defined in system_config.
+
+    Reads rf_chains from system_config.yaml and calculates noise floor
+    for each RX path (Low Band <2 GHz, Mid Band 2-18 GHz).
+
+    Args:
+        bandwidth_hz: Analysis bandwidth in Hz (default 20 MHz)
+        snr_required_db: Required SNR for sensitivity
+
+    Returns:
+        MultiBandNoiseResult with noise floor for each band
+    """
+    from .loader import load_system_config
+
+    config = load_system_config()
+
+    # Load rf_chains directly from YAML for multi-path data
+    config_path = Path(__file__).parent / "system_config.yaml"
+    with open(config_path, 'r') as f:
+        data = yaml.safe_load(f)
+
+    rf_chains = data.get('rf_chains', {})
+    rx_paths = rf_chains.get('rx_paths', {})
+
+    bands = {}
+
+    for path_id, path_data in rx_paths.items():
+        name = path_data.get('name', path_id)
+        freq_range = path_data.get('freq_range_ghz', [2.0, 18.0])
+        cascade_nf_db = path_data.get('cascade_noise_figure_db', 3.5)
+        total_gain_db = path_data.get('total_gain_db', 30.0)
+        damage_thresh_dbm = path_data.get('damage_threshold_dbm', 10)
+
+        # Use center frequency for the band
+        center_freq_ghz = (freq_range[0] + freq_range[1]) / 2
+
+        # Calculate thermal noise
+        thermal_noise_dbm = calculate_thermal_noise_dbm(bandwidth_hz)
+
+        # Add RF chain noise figure
+        rf_chain_noise_dbm = thermal_noise_dbm + cascade_nf_db
+
+        # ADC noise contribution (use legacy config for ADC specs)
+        adc_noise_dbm = calculate_adc_noise_contribution(config, center_freq_ghz, bandwidth_hz)
+
+        # Combine noise sources
+        rf_noise_linear = 10 ** (rf_chain_noise_dbm / 10)
+        adc_noise_linear = 10 ** (adc_noise_dbm / 10)
+        total_noise_linear = rf_noise_linear + adc_noise_linear
+        system_noise_floor_dbm = 10 * np.log10(total_noise_linear)
+
+        # Sensitivity and dynamic range
+        sensitivity_dbm = system_noise_floor_dbm + snr_required_db
+        dynamic_range_db = damage_thresh_dbm - system_noise_floor_dbm
+
+        # Determine band name
+        if freq_range[1] <= 2.0:
+            band_name = "Low Band"
+        elif freq_range[0] >= 2.0 and freq_range[1] <= 18.0:
+            band_name = "Mid Band"
+        else:
+            band_name = name
+
+        result = NoiseFloorResult(
+            thermal_noise_dbm=thermal_noise_dbm,
+            rf_chain_noise_dbm=rf_chain_noise_dbm,
+            adc_noise_dbm=adc_noise_dbm,
+            system_noise_floor_dbm=system_noise_floor_dbm,
+            sensitivity_dbm=sensitivity_dbm,
+            dynamic_range_db=dynamic_range_db,
+            frequency_ghz=center_freq_ghz,
+            bandwidth_hz=bandwidth_hz,
+            snr_required_db=snr_required_db,
+            band_name=band_name
+        )
+
+        bands[band_name] = result
+
+    return MultiBandNoiseResult(bands=bands)
