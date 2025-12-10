@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from .core import JammerConfig, EmitterConfig, JammingAnalyzer, JammingResult
+from .core import JammerConfig, RadarConfig, JammingAnalyzer, JammingResult
 
 
 def plot_js_vs_range(analyzer: JammingAnalyzer,
@@ -203,29 +203,83 @@ def plot_js_heatmap(analyzer: JammingAnalyzer,
     return ax
 
 
+def plot_js_vs_rcs(analyzer: JammingAnalyzer,
+                   range_km: float = 50.0,
+                   rcs_min_m2: float = 0.1,
+                   rcs_max_m2: float = 10.0,
+                   ax: Optional[plt.Axes] = None,
+                   save_path: Optional[str] = None) -> plt.Axes:
+    """
+    Plot J/S ratio vs platform RCS.
+
+    Shows how reducing platform RCS improves jamming effectiveness.
+
+    Args:
+        analyzer: JammingAnalyzer instance
+        range_km: Fixed range
+        rcs_min_m2: Minimum RCS
+        rcs_max_m2: Maximum RCS
+        ax: Optional axes to plot on
+        save_path: Optional path to save figure
+
+    Returns:
+        Matplotlib axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+    rcs_data = analyzer.analyze_vs_rcs(range_km, rcs_min_m2, rcs_max_m2, 50)
+
+    ax.semilogx(rcs_data['rcs_m2'], rcs_data['js_ratio_db'], 'b-', linewidth=2)
+
+    # Threshold lines
+    ax.axhline(0, color='k', linestyle='--', linewidth=1.5, label='0 dB (Equal)')
+    ax.axhline(10, color='g', linestyle='--', linewidth=1.5, label='10 dB (Good)')
+    ax.axhline(20, color='orange', linestyle='--', linewidth=1.5, label='20 dB (Excellent)')
+
+    # Mark current platform RCS
+    current_rcs = analyzer.jammer.platform_rcs_m2
+    result = analyzer.analyze(range_km * 1000, 0)
+    ax.axvline(current_rcs, color='r', linestyle=':', linewidth=2,
+               label=f'Platform RCS: {current_rcs} m²')
+    ax.plot(current_rcs, result.js_ratio_db, 'ro', markersize=10)
+
+    ax.set_xlabel('Platform RCS (m²)', fontsize=12)
+    ax.set_ylabel('J/S Ratio (dB)', fontsize=12)
+    ax.set_title(f'J/S Ratio vs Platform RCS (Range = {range_km} km)\n'
+                 f'Smaller RCS = Better Jamming', fontsize=14)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best')
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+
+    return ax
+
+
 def create_jamming_summary_figure(jammer: JammerConfig,
-                                   emitter: EmitterConfig,
+                                   radar: RadarConfig,
                                    output_dir: Optional[str] = None) -> plt.Figure:
     """
     Create a comprehensive jamming analysis summary figure.
 
     Args:
-        jammer: JammerConfig instance
-        emitter: EmitterConfig instance
+        jammer: JammerConfig instance (includes platform RCS)
+        radar: RadarConfig instance
         output_dir: Optional directory to save figure
 
     Returns:
         Matplotlib figure
     """
-    analyzer = JammingAnalyzer(jammer, emitter)
+    analyzer = JammingAnalyzer(jammer, radar)
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
     # Plot 1: Antenna pattern
     plot_antenna_pattern(jammer, ax=axes[0, 0])
 
-    # Plot 2: EIRP vs angle
-    plot_eirp_vs_angle(jammer, ax=axes[0, 1])
+    # Plot 2: J/S vs RCS (shows platform RCS effect)
+    plot_js_vs_rcs(analyzer, range_km=50.0, ax=axes[0, 1])
 
     # Plot 3: J/S vs range
     plot_js_vs_range(analyzer, ax=axes[1, 0])
@@ -234,10 +288,11 @@ def create_jamming_summary_figure(jammer: JammerConfig,
     plot_js_heatmap(analyzer, ax=axes[1, 1])
 
     # Title
-    fig.suptitle(f'Jamming Analysis Summary\n'
+    fig.suptitle(f'Self-Protect Jamming Analysis\n'
                  f'Jammer: {jammer.input_power_dbm} dBm, {jammer.antenna_gain_dbi} dBi, '
                  f'{jammer.beamwidth_deg}° BW | '
-                 f'Target: {emitter.power_dbw} dBW, {emitter.antenna_gain_dbi} dBi radar',
+                 f'Platform RCS: {jammer.platform_rcs_m2} m² | '
+                 f'Radar: {radar.power_dbw} dBW, {radar.antenna_gain_dbi} dBi',
                  fontsize=14, fontweight='bold')
 
     plt.tight_layout()
@@ -251,22 +306,22 @@ def create_jamming_summary_figure(jammer: JammerConfig,
 
 if __name__ == "__main__":
     # Demo visualization
-    from .core import JammerConfig, EmitterConfig
+    from .core import JammerConfig, RadarConfig
 
     jammer = JammerConfig(
         input_power_dbm=50,
         antenna_gain_dbi=20,
         beamwidth_deg=30,
         pattern_type='gaussian',
+        frequency_ghz=6.0,
+        platform_rcs_m2=2.0
+    )
+
+    radar = RadarConfig(
+        power_dbw=60,
+        antenna_gain_dbi=35,
         frequency_ghz=6.0
     )
 
-    emitter = EmitterConfig(
-        power_dbw=60,
-        antenna_gain_dbi=35,
-        frequency_ghz=6.0,
-        target_rcs_m2=2.0
-    )
-
-    fig = create_jamming_summary_figure(jammer, emitter)
+    fig = create_jamming_summary_figure(jammer, radar)
     plt.show()
