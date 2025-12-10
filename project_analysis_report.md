@@ -7,136 +7,184 @@ This project is a sophisticated Python-based framework designed for the simulati
 **Key Aspects:**
 
 *   **Purpose:** The main goal is to automate the generation of technical design reviews by running various analyses on a consistent system model and compiling the results into a PowerPoint presentation.
-*   **Evolution:** The project shows a clear transition from standalone MATLAB analysis scripts (found in directories like `adc`, `direction_finding`) to a more integrated and modular Python framework. The Python packages (`adc_analysis`, `direction_finding_analysis`, etc.) are essentially robust versions of these MATLAB prototypes.
-*   **Centralized Configuration:** A critical architectural element is the `system_config` module. A single `system_config.yaml` file acts as the "single source of truth" for all hardware parameters (e.g., ADC, RF Chains, Antennas). This configuration is loaded into type-safe Python dataclasses, ensuring consistency across all analyses.
-*   **Modular Analysis:** The project is structured with several distinct analysis modules, each focusing on a specific aspect of system performance:
-    *   `adc_analysis`: Analyzes digitizer performance.
-    *   `antenna_coverage_analysis`: Evaluates overall antenna gain patterns.
-    *   `direction_finding_analysis`: Determines angle of arrival estimation accuracy.
-    *   `ekf_geolocation`: Assesses emitter geolocation performance using an Extended Kalman Filter.
-    *   `esm_analysis`: Calculates detection range and sensitivity against defined threats.
-    *   `rf_chain_analysis`: Performs signal path link budget calculations (gain, noise figure).
-*   **Flexible Architecture:** Each Python analysis module is designed to be run independently using local configuration files for development, but it also includes a `load_from_system_config` function to integrate seamlessly with the central `system_config` for broader workflows.
-*   **Automated Reporting:** The `reporting` module, particularly `generate_design_review.py`, is where all analyses converge. It orchestrates the execution of each analysis, collects key results and plots, and then programmatically generates a complete PowerPoint design review presentation.
-
-In essence, this project functions as a Model-Based Systems Engineering (MBSE) tool, leveraging a central system model to automate performance analysis and generate engineering documentation, which is crucial for rapid design iterations and trade studies.
+*   **Recent Improvements:** The framework has been recently upgraded to include:
+    *   **Pulse Parameter Analysis:** Detailed modeling of measurement accuracy for Frequency (DLFD), Time of Arrival (TOA), and Pulse Width.
+    *   **Requirements Verification:** A formal compliance engine (`system_config/compliance.py`) that checks system performance against defined specifications.
+    *   **Spurious Analysis:** Modeling of ADC spurious performance and statistical false alarm rates.
+    *   **Multi-Band Reporting:** Improved reporting that correctly handles split Low/Mid band architectures.
+*   **Centralized Configuration:** A critical architectural element is the `system_config` module. A single `system_config.yaml` file acts as the "single source of truth" for all hardware parameters.
 
 ## Current State Assessment
 
 **Strengths:**
-*   **Architecture:** The `system_config` central "source of truth" pattern is excellent. `direction_finding_analysis` and `esm_analysis` correctly link back to the `rf_chain` noise figure calculations when using the `load_from_system_config` loaders.
-*   **Modularity:** The separation of concerns (RF chain vs. ESM vs. DF) is clean.
+*   **Architecture:** The `system_config` central "source of truth" pattern is excellent and now integrates well with sensitivity and noise floor calculations.
+*   **Verification:** The new compliance matrix feature allows for automated pass/fail checks, moving the tool towards verification utility.
+*   **Fidelity:** The addition of spurious analysis and pulse parameter modeling adds significant depth to the simulation.
 
-**Gaps & Weaknesses:**
-1.  **Missing Pulse Analysis:** While `esm_analysis` defines pulse parameters (PRI, Pulse Width) for threats, it **does not analyze them**. It only checks "Detection" (SNR > Threshold). It completely lacks logic for "Measurement Accuracy" (e.g., "Can I measure the frequency to within 1 MHz?" or "What is the Probability of Intercept for a given pulse train?").
-2.  **ADC Isolation:** `adc_analysis` is currently a silo. It calculates detailed metrics like SFDR and SINAD, but these do not explicitly feed into the ESM False Alarm Rate or Sensitivity calculations beyond a simple noise figure number.
-3.  **Lack of Formal Requirements:** The project has *Hardware Specifications* (what we built) but lacks *System Requirements* (what we need). There is no automated check to say "Pass/Fail" against a requirement like "Frequency Accuracy < 1 MHz" or "Direction Finding Accuracy < 2 degrees RMS".
+**Remaining Gaps & Weaknesses:**
+1.  **Fragmented Detection Logic:** The `esm_analysis` module currently contains competing detection models: a simple binary threshold model in `core/detection_model.py` and a more detailed statistical model in `esm_detection.py`.
+2.  **Isolated Jamming Analysis:** While a `jamming_analysis` module was created, it operates in isolation. It is not yet integrated into the trajectory simulations (`ekf_geolocation`) to model J/S ratios over a dynamic mission profile.
+3.  **Static Pfa Logic:** The scheduler and detection probabilities rely on a hardcoded $P_{fa}$ ($10^{-6}$) rather than deriving it dynamically from the user's SNR threshold setting.
+4.  **Verbose Configuration:** The `rf_chains.yaml` configuration is repetitive. It defines components inline for every path rather than using a reusable "library & archetype" approach.
+5.  **Configuration Disconnect:** Individual analysis modules (ADC, Antenna Coverage, RF Chain, EKF Geolocation) currently default to using their own isolated, often outdated, local YAML files instead of the central `system_config.yaml`.
+6.  **Hardcoded Simulation Parameters:** The EKF simulation hardcodes critical system parameters like Bandwidth (1 MHz), Noise Figure (3 dB), and Interferometer Geometry inside internal modules (`signal_propagation.py`, `interferometer.py`), creating a risk of divergence from the system design.
+7.  **Single-Frequency Antenna Analysis:** The `antenna_coverage_analysis` module only analyzes a single frequency at a time and merges all antennas. It cannot currently produce separate coverage maps for Low/Mid bands or Transmit vs. Receive paths.
 
-## Recommended Updates for Comprehensive EW System Analysis
+## Recommended Updates (Phase 2)
 
-Here is a prioritized list of updates to make the system more comprehensive and cohesive for Electronic Warfare system analysis:
+The following updates focus on architectural refactoring and deeper integration of the analysis modules.
 
-### 1. Implement Pulse Parameter Measurement Analysis (High Priority)
-**Justification:** An EW system's primary function is not just to detect but to accurately characterize emitter pulses. The current framework only models detection. The analysis must account for the specific digital signal processing chain (High-Speed ADC $\rightarrow$ DDC $\rightarrow$ Narrowband Channelizer) and the specific measurement algorithms used (e.g., DLFM).
+### 1. Enforce Centralized Configuration (Architecture)
+**Justification:** Currently, running an individual analysis script (e.g., `adc_analysis/example_analysis.py`) uses local, isolated configuration files that may contradict the central system design. All modules must explicitly use `system_config.yaml` as the primary source of truth.
 **Action:**
-*   **Update `system_config.yaml`:** Explicitly define the bandwidth hierarchy: `adc_sample_rate_gsps` (40+), `instantaneous_bandwidth_ghz` (1.0), and `channel_bandwidth_mhz` (20.0).
-*   **Expand `esm_analysis`:** Add a `MeasurementAccuracy` module that models the specific signal chain:
-    *   **Noise Rejection (Process Gain):** Calculate effective SNR at the measurement point (e.g., 20 MHz channel) by adding noise rejection gain: $10 \log_{10}(BW_{adc}/BW_{channel})$. *Note: Explicitly distinguish this from coherent integration gain; we are rejecting noise, not summing signal.*
-*   **Apply Specific Error Models:**
-    *   **Frequency Accuracy (DLFM):** Model using **Delay Line Frequency Measurement** physics. Accuracy $\propto \frac{1}{SNR \cdot \tau_{delay}}$. Longer delays improve accuracy but risk ambiguity.
-    *   **Time of Arrival (TOA):** Model as a function of **Channel Bandwidth** (Rise Time) and SNR. Explicitly account for the degradation in timing resolution due to the 20 MHz bandwidth limiting, despite the high ADC rate.
-    *   **Pulse Width:** Derived from the variance of two TOA measurements ($\sigma_{PW} \approx \sqrt{2} \cdot \sigma_{TOA}$). 
-*   **Outputs:** Produce plots of "RMS Error vs. Input SNR" for each parameter, clearly showing the system's limit of precision.
+*   **Refactor Loaders:** Update `loader.py` in all analysis packages (`adc`, `antenna`, `rf_chain`, `direction_finding`, `ekf_geolocation`) to mandatorily load shared parameters from `system_config.yaml`.
+*   **EKF Integration:** Specifically update `ekf_geolocation/config/loader.py` to overwrite its local `interferometer` config with the one from `system_config`.
+*   **Signal Propagation Fix:** Update `ekf_geolocation/core/signal_propagation.py` to accept dynamic `bandwidth_hz` and `noise_figure_db` (from `system_config` RF Chain/ADC specs) instead of using hardcoded values (1 MHz / 3 dB).
+*   **Deprecate Local Overrides:** Remove high-level system parameters from local YAML files to force dependency on the central config.
+*   **Standardize Defaults:** Ensure fallback values in code match the system baseline (e.g., default ADC rate = 40 GSPS, not 3 GSPS).
 
-### 2. Create a `system_requirements` Module and Compliance Matrix (High Priority)
-**Justification:** To transition from a "simulation tool" to a "verification tool", the project needs a formal way to define and check against system-level performance requirements.
+### 2. Multi-Band & Multi-Role Antenna Coverage Analysis
+**Justification:** The system operates in multiple bands (Low/Mid) and has distinct Transmit and Receive paths. The current analysis merges all antennas into a single map at a single frequency, obscuring gaps and performance differences.
 **Action:**
-*   **New Configuration File:** Create a new YAML file (e.g., `system_config/requirements.yaml`) to formally define key system performance requirements (e.g., `req_freq_accuracy_rms_mhz: 1.0`, `req_direction_finding_accuracy_rms_deg: 2.0`, `req_dynamic_range_db: 60.0`).
-*   **Integrate Checker:** Develop a Python module to load these requirements and compare them against the calculated performance from `esm_analysis`, `direction_finding_analysis`, `ekf_geolocation`, etc.
-*   **Reporting:** Update `reporting/generate_design_review.py` to include a "Compliance Matrix" that explicitly shows a Pass/Fail status for each requirement, along with the calculated value.
+*   **Grouping Logic:** Update `antenna_coverage_analysis` to group antennas by **Role** (TX/RX) and **Band** (Low/Mid) based on their `freq_band` tag.
+*   **Looping Analysis:** Modify the main analysis loop to run coverage calculations independently for each group (e.g., "RX Low Band", "TX Mid Band").
+*   **Frequency-Dependent Patterns:** Implement logic to adjust beamwidth based on frequency (e.g., horn antenna beamwidth narrowing at higher frequencies) if specific data is available, or use band-center frequencies for calculation.
+*   **Output:** Generate 4 distinct sets of coverage plots: RX Low, RX Mid, TX Low, TX Mid.
 
-### 3. Integrate ADC Spurious Performance & Distinguish False Alarm Types (Medium Priority)
-**Justification:** A robust analysis must distinguish between *statistical* false alarms (noise) and *deterministic* false alarms (hardware artifacts).
-**Action:**
-*   **Statistical False Alarm Rate (FAR) Analysis:**
-    *   **Threshold Setting:** The analysis should explicitly account for the threshold being set a certain dB level *above the noise floor* (e.g., in `esm_analysis`), which is a common technique to manage and reduce the statistical false alarm rate.
-    *   **Question:** "How low can I set my threshold to see weak signals without random noise triggering detection?"
-    *   **Driver:** Thermal Noise Floor (from `rf_chain`), Receiver Bandwidth, Integration Time, and the specific Threshold setting relative to the noise floor.
-    *   **Metric:** "Sensitivity at target $P_{fa}$ (e.g., $10^{-6}$ false alarms per second)."
-*   **Deterministic Spurious Analysis (Dynamic Range):**
-    *   **New Logic:** Implement a specific check for **High-Power False Alarms** driven by ADC SFDR.
-    *   **Scenario:** When a strong signal is present (e.g., a jammer or nearby radar), calculate the magnitude of generated spurs (`Signal Power - SFDR`).
-    *   **Failure Condition:** If `Spur Power > Detection Threshold`, report a **"Spurious False Alarm"**.
-    *   **Metric:** Report "Instantaneous Dynamic Range" — the power range between the Sensitivity floor and the level where spurs become visible.
-
-### 4. Refine Unified Sensitivity and Noise Modeling (Medium Priority)
-**Justification:** While `esm_analysis` and `direction_finding_analysis` currently fetch noise figures from `rf_chain`, ensuring a truly unified and consistent approach, especially considering ADC quantization noise contributions, is crucial.
-**Action:**
-*   **Centralize `calculate_system_noise_floor`:** Ensure that the `system_config/calculate_system_noise_floor` or a similar central utility is the single authoritative source for system noise floor and sensitivity calculations, explicitly incorporating all relevant contributions (thermal, RF chain, ADC).
-*   **ADC Integration:** Modify `adc_analysis` to contribute its quantization noise and effective noise figure directly to the `system_config` for a more accurate overall system sensitivity.
-
-### 5. Incorporate Pulse Density / Throughput Analysis (Advanced Feature)
-**Justification:** EW systems operating in dense signal environments face challenges with pulse collisions and processing overload. Modeling this is vital for understanding system limits.
-**Action:**
-*   **New Module:** Consider a new module or extension to `esm_analysis` to model pulse density effects.
-*   **Metrics:** Calculate metrics such as `probability_of_intercept` given a specific pulse density, `pulse_desensitization` due to high instantaneous pulse rates, and `processing_latency`. This would involve defining a simplified model for the receiver's instantaneous bandwidth and processing capabilities.
-
-### 6. Refactor RF Chain Management Strategy (Architectural Improvement)
-**Justification:** The current system defines RF paths individually or in simple groups. As the complexity grows (e.g., different cable lengths for different array elements, or manufacturing tolerances), a more robust "Library & Archetype" pattern is needed to avoid configuration duplication and errors.
+### 3. Refactor RF Chain Management Strategy (Architectural Improvement)
+**Justification:** The current system defines RF paths individually. As complexity grows (e.g., varying cable lengths or element counts), a "Library & Archetype" pattern is needed to avoid configuration duplication and errors.
 **Action:**
 *   **Refactor `rf_chains.yaml`:**
     *   **Component Library:** Ensure *every* unique hardware component (e.g., "LNA Type A", "Cable 1m") is defined strictly in the `components` section.
-    *   **Chain Archetypes:** Define chain configurations (e.g., "Standard Channel", "Long-Cable Channel") solely by referencing components from the library. Do not define component parameters inline within a chain definition.
-*   **Update `system_config.yaml`:**
-    *   Implement a mapping structure that assigns physical path IDs (e.g., "RX_Channel_1" through "RX_Channel_4") to specific Chain Archetypes defined in `rf_chains.yaml`.
-    *   This allows for handling "groups" of identical paths while easily accommodating single paths with unique variances (e.g., "RX_Channel_4" uses "Long-Cable Channel" archetype).
+    *   **Chain Archetypes:** Define chain configurations (e.g., "Standard Channel", "Long-Cable Channel") solely by referencing components from the library.
+*   **Update `system_config.yaml`:** Implement a mapping structure that assigns physical path IDs (e.g., "RX_Channel_1") to specific Chain Archetypes.
 
-### 7. Optional PowerPoint Template for Design Review (Reporting Enhancement)
-**Justification:** To provide greater flexibility and control over the generated design review's aesthetics and branding, allowing users to specify a custom PowerPoint template is essential.
+### 4. Restore Trajectory Jamming Simulation (Integration)
+**Justification:** The system now has a `jamming_analysis` module, but it only performs static calculations. The capability to analyze jamming effectiveness (J/S ratio) dynamically over a flight path needs to be restored and integrated.
 **Action:**
-*   **Modify `generate_design_review.py`:** Update the script to accept an optional command-line argument or configuration parameter for a PowerPoint template file path (.potx or .pptx).
-*   **Apply Template:** When generating the PowerPoint, apply the specified template to the presentation to inherit its slide masters, layouts, and theme.
+*   **Integrate into `ekf_geolocation`:** Update the trajectory simulation to calculate J/S (Jamming-to-Signal) ratios at each time step.
+*   **Dynamic Geometry:** Use the dynamic geometry between the jammer (platform) and the victim (emitter) to calculate antenna gains based on off-boresight angles.
+*   **Output:** Generate plots showing "J/S vs Time" and "Burn-through Range" for the specific simulated trajectory.
 
-### 8. Jamming Performance Analysis (New Capability)
-**Justification:** The system lacks analysis for its jamming capabilities. A previous capability allowed for analyzing jamming effectiveness over a trajectory, considering antenna patterns and power. This functionality needs to be restored and formalized.
+### 5. Refine ESM Analysis Architecture (Refactoring)
+**Justification:** The `esm_analysis` module currently has two "brains": `core/detection_model.py` (Binary) and `esm_detection.py` (Probabilistic). This causes confusion and potential inconsistency.
 **Action:**
-*   **Correct Configuration:** Update `system_config.yaml` to correctly reflect the transmit and receive path hardware for the low-band:
-    *   Change `tx_low_band` `num_paths` from 2 to 1.
-    *   The now 'available' path (which was previously a second low-band TX path) should be configured as the `rx_low_band` path. This ensures a final configuration of one `tx_2_18ghz` path, one `tx_low_band` path, and one `rx_low_band` path.
-*   **Create `jamming_analysis` Module:** Develop a new Python module to analyze the standalone performance of each unique transmit chain (EIRP, Jamming-to-Signal Ratio capability vs Range).
-*   **Restore Trajectory Jamming Simulation:**
-    *   Integrate jamming effectiveness calculations into the `ekf_geolocation` or `demo` trajectory simulations.
-    *   Calculate J/S (Jamming-to-Signal) ratio at each time step based on the dynamic geometry between the jammer (platform) and the victim (emitter).
-    *   **Critical Input:** Use the `beamwidth_deg` and antenna orientation from `system_config.yaml` to apply a realistic gain pattern (e.g., Gaussian or Cosine-squared) instead of assuming isotropic radiation.
-    *   **Reference:** Refer to `jamming/jamming_effectiveness_analysis.m` (reference MATLAB file to be provided) for the specific algorithms and logic used in the legacy implementation.
+*   **Unify Detection Logic:** Refactor `esm_analysis` to use a single, unified detection engine. Promote the statistical approach in `esm_detection.py` to be the core model.
+*   **Remove Redundancy:** Deprecate or remove the binary model in `core/detection_model.py`, ensuring all parts of the system (scheduler, reporting) call the unified engine.
 
-### 9. Refine ESM Analysis Architecture (Refactoring)
-**Justification:** The `esm_analysis` module currently contains competing detection models: a simple binary threshold model in `core/detection_model.py` and a more detailed statistical model (using Albersheim's equation) in `esm_detection.py`. This duplication leads to inconsistency.
+### 6. Dynamic Pfa Derivation
+**Justification:** The current Albersheim's equation implementation hardcodes $P_{fa}$ ($10^{-6}$) and ignores the user-specified threshold setting. This decouples the simulation from the actual system configuration.
 **Action:**
-*   **Unify Detection Logic:** Refactor `esm_analysis` to use a single, unified detection engine. Recommend promoting the statistical approach in `esm_detection.py` to be the core model, as it provides more fidelity (Pd vs SNR) than the binary model.
-*   **Integrate New Capabilities:** Ensure this unified engine directly calls the new `MeasurementAccuracy` (Pulse Parameter) and `FalseAlarmAnalysis` (Spurious) modules defined in previous steps.
+*   **Cohesive $P_{fa}$ Derivation:** Calculate $P_{fa}$ dynamically from the user's configured ratio of `snr_threshold_db` to `noise_floor_db` (using `erfc` logic).
+*   **Update `dwell_scheduler.py`:** Ensure the scheduler uses this dynamic $P_{fa}$ logic. This guarantees that changing the threshold in `system_config.yaml` correctly ripples through to update the Probability of Intercept (POI).
 
-### 10. Refine Dwell Scheduler & Detection Probability Logic (Algorithmic Improvement)
-**Justification:** The current Albersheim's equation implementation hardcodes $P_{fa} = 10^{-6}$ and ignores the user-specified threshold setting. This decouples the simulation from the actual system configuration.
+### 7. Refine Analysis Visualizations and Metrics (Visualization Improvement)
+**Justification:** Specific metrics and visualizations are needed to better communicate system limitations.
 **Action:**
-*   **Cohesive $P_{fa}$ Derivation:** Calculate $P_{fa}$ dynamically from the user's configured ratio of `snr_threshold_db` to `noise_floor_db`. This derived $P_{fa}$ must be the single source of truth passed into all detection probability calculations.
-*   **Update `esm_detection.py`:** Modify `calculate_detection_probability` to accept this variable $P_{fa}$ instead of using a hardcoded value.
-*   **Update `dwell_scheduler.py`:** Ensure the scheduler uses this dynamic $P_{fa}$ logic. This guarantees that changing the threshold in `system_config.yaml` correctly ripples through to update the Probability of Intercept (POI) and optimized dwell times.
-
-### 11. Update Reporting to Reflect Multi-Band Capabilities (Reporting Accuracy)
-**Justification:** The current Design Review slides report a single value for key metrics (Frequency Range, Sensitivity, RF Chain Gain/NF), often defaulting to the 2-18 GHz "Mid Band" and ignoring the <2 GHz Low Band. This misrepresents the system's full capabilities.
-**Action:**
-*   **Update `generate_design_review.py`:** Modify the metric collection logic to explicitly loop through all defined frequency bands (Low, Mid, etc.) defined in `system_config`.
-*   **Rename High Band:** Update references of "High Band" (2-18 GHz) to **"Mid Band"** to align with standard nomenclature (since 18 GHz+ would be High Band).
-*   **Multi-Band Metrics:** Report metrics like **Noise Floor**, **Sensitivity**, and **Frequency Range** as a table or list (e.g., "Sensitivity: -90 dBm (Low) / -85 dBm (Mid)") rather than a single average.
-*   **RF Chain Summary:** Update the "RF Chain Performance" slide to explicitly list performance (Gain, NF) for *each* unique chain type (e.g., "Mid Band RX", "Low Band RX") instead of a single summary value.
-*   **Simplify Interferometer Summary:** Remove specific element counts and baseline details from the high-level summary slide, focusing instead on the frequency coverage (2-18 GHz only) to avoid clutter.
-*   **Verify ESM Plots:** Ensure the generated ESM analysis plots (SNR vs Range) explicitly include example emitters for *both* the Low (<2 GHz) and Mid (2-18 GHz) bands to demonstrate full-spectrum capability.
-
-### 12. Refine Analysis Visualizations and Metrics (Visualization Improvement)
-**Justification:** Several analysis plots simplify data in ways that can be misleading (e.g., isotropic interferometer elements, combined antenna coverage). Key performance metrics for geolocation convergence are also missing.
-**Action:**
-*   **Interferometer SNR:** Update `direction_finding_analysis` to use a realistic element gain pattern (e.g., Cosine-squared or user-provided file) instead of isotropic. This should result in SNR degradation at high incident angles in the "SNR vs Angle" plot.
 *   **Blind Spot Visualization:** Enhance `antenna_coverage_analysis` plots to explicitly color-code or overlay "Blind Spot" regions (where Gain < Threshold) on the 2D coverage map.
-*   **Split Coverage Maps:** Generate separate coverage maps for **Low Band** (<2 GHz) and **Mid Band** (2-18 GHz) antennas. Merging them into a single map obscures the gaps inherent in each specific band.
-*   **Geolocation Convergence Metric:** Add a new metric to the EKF simulation results: **"Error after N valid measurements"** (e.g., N=10). This provides a more robust measure of system settling time than just "Time to Convergence," which depends heavily on trajectory.
+*   **Geolocation Convergence Metric:** Add a new metric to the EKF simulation results: **"Error after N valid measurements"** (e.g., N=10). This provides a more robust measure of system settling time than just "Time to Convergence".
+
+---
+
+# Technical Implementation Guide (Phase 2)
+
+**Target Repository:** Electronic Warfare System Analysis Framework
+**Objective:** Implement architectural refactoring and integration tasks defined in Phase 2.
+
+### Task 1: Enforce Centralized Configuration
+**Goal:** Force all analysis modules to load primary parameters from `system_config.yaml`.
+
+*   **Target Files:** `adc_analysis/config/loader.py`, `antenna_coverage_analysis/config/loader.py`, `rf_chain_analysis/config/loader.py`, `direction_finding_analysis/config/loader.py`, `ekf_geolocation/config/loader.py`.
+    *   **Logic Update:** Modify the `load_config()` function in each loader.
+    *   **Dependency:** Import `system_config.load_system_config`.
+    *   **Implementation:**
+        1.  Load the central `system_config` object.
+        2.  Load the local YAML (only for module-specific details like jitter or simulation steps).
+        3.  **Overwrite** local values with system values:
+            *   ADC: `sample_rate`, `resolution`.
+            *   RF Chain: `freq_range`.
+            *   Antenna: `n_elements`, `positions`, `gain`.
+            *   Direction Finding: `n_elements`, `baseline`, `phase_error`.
+            *   EKF: Overwrite the entire `interferometer` object in `SimulationConfig` with data from `system_config.interferometer`.
+*   **Target File:** `ekf_geolocation/core/signal_propagation.py`
+    *   **Update:** Modify `calculate_signal_propagation` to accept `bandwidth_hz` and `noise_figure_db` as arguments (sourced from system config) rather than hardcoding `1e6` and `3.0`.
+
+### Task 2: Multi-Band & Multi-Role Antenna Coverage
+**Goal:** Generate separate coverage maps for Low/Mid bands and TX/RX paths.
+
+*   **Target File:** `antenna_coverage_analysis/config/loader.py`
+    *   **Logic:** Update `load_uav_config` to explicitly group antennas into dictionary lists: `{'rx_low': [], 'rx_mid': [], 'tx_low': [], 'tx_mid': []}`.
+*   **Target File:** `antenna_coverage_analysis/core/analyzer.py`
+    *   **Logic:**
+        1.  Add a `frequency_ghz` parameter to the `analyze` method.
+        2.  Inside `analyze`, use this frequency to look up beamwidth scaling factors (if implementing dynamic beamwidth).
+        3.  Allow `analyze` to accept a subset list of antennas (the "group").
+*   **Target File:** `antenna_coverage_analysis/example_analysis.py` (and reporting script)
+    *   **Orchestration:** Loop through the 4 groups defined in the config.
+    *   **Execution:** Call `analyzer.analyze(antennas=group, frequency=band_center_freq)` for each.
+    *   **Output:** Save 4 separate plots (e.g., `coverage_rx_mid.png`, `coverage_tx_low.png`).
+
+### Task 3: RF Chain Architecture Refactor
+**Goal:** Eliminate configuration duplication in `rf_chains.yaml` by implementing a "Library & Archetype" pattern.
+
+*   **Target File:** `system_config/rf_chains.yaml`
+    *   **Schema Change:** Restructure the YAML to have three distinct sections:
+        1.  `component_library`: A list of named components (e.g., "LNA_Type_A", "RG58_Cable").
+        2.  `chain_archetypes`: Defined chains that reference components by name (e.g., "Standard_MidBand_RX").
+        3.  `paths`: The physical paths (e.g., "rx_path_1") that reference an `archetype_id`.
+*   **Target File:** `system_config/loader.py`
+    *   **Logic Update:** Update the `_parse_rf_chains` function.
+    *   **Step 1:** Parse the library into a dictionary of component objects.
+    *   **Step 2:** Parse archetypes, resolving component names to objects.
+    *   **Step 3:** Parse paths, instantiating the specific chain based on the archetype.
+
+### Task 4: Trajectory Jamming Integration
+**Goal:** Enable dynamic Jamming-to-Signal (J/S) analysis within the EKF trajectory simulation.
+
+*   **Target File:** `ekf_geolocation/core/simulation.py`
+    *   **Dependency:** Import `JammingAnalyzer` and `JammerConfig` from `jamming_analysis`.
+    *   **Logic Update:** Inside the `run_simulation` loop (where signal propagation is calculated):
+        1.  Instantiate `JammingAnalyzer` using the jammer config from `system_config`.
+        2.  For each time step $t$:
+            *   Calculate the relative angle (off-boresight) between the Platform's Jammer antenna and the Emitter.
+            *   Call `analyzer.analyze(range_m[t], angle_deg[t])`.
+            *   Store the resulting `js_ratio_db` and `burn_through_margin_db`.
+    *   **Output:** Append these metrics to the `SimulationResult` object.
+*   **Target File:** `ekf_geolocation/example_simulation.py`
+    *   **Visualization:** Add a new subplot to the results figure showing "J/S Ratio vs. Time" with a red line indicating the 0 dB burn-through threshold.
+
+### Task 5: Unified ESM Detection Logic
+**Goal:** Remove the binary detection model and use the probabilistic Albersheim model everywhere.
+
+*   **Target File:** `esm_analysis/core/detection_model.py`
+    *   **Action:** Deprecate the hardcoded `evaluate_detection` logic.
+    *   **Logic Update:** Import `ESMDetector` from `esm_analysis.esm_detection`.
+    *   **Refactor:** Change `evaluate_detection` to:
+        1.  Instantiate `ESMDetector`.
+        2.  Call `calculate_detection_probability(radar, range, n_pulses)`.
+        3.  Set the `DetectionResult.status` based on a probability threshold (e.g., $P_d > 50\%$) rather than a raw SNR threshold, or simply pass the probability through.
+*   **Target File:** `esm_analysis/core/analyzer.py` (if exists) or `threat_categorizer.py`
+    *   **Update:** Ensure threat categorization uses the computed $P_d$ (Probability of Detection) to determine if a threat is "Detectable" rather than a simple `SNR > Threshold` check.
+
+### Task 6: Dynamic Pfa Derivation
+**Goal:** Ensure the False Alarm Rate ($P_{fa}$) is derived from the SNR threshold, not hardcoded.
+
+*   **Target File:** `esm_analysis/config/loader.py`
+    *   **Logic Update:** In `load_receiver_from_system_config`:
+        1.  Read `snr_threshold_db` from the config.
+        2.  Import `SpuriousAnalyzer` from `esm_analysis.spurious_analysis`.
+        3.  Calculate $P_{fa}$ using `compute_pfa_for_threshold(snr_threshold_db)`.
+        4.  Assign this calculated value to `ReceiverConfig.pfa` instead of the default `1e-6`.
+*   **Target File:** `esm_analysis/dwell_scheduler.py`
+    *   **Verification:** Ensure `ESMDetector` is initialized using `receiver.pfa` (which is now dynamic) rather than a default value.
+
+### Task 7: Enhanced Visualizations
+**Goal:** Add specific metrics and overlays to plots.
+
+*   **Target File:** `antenna_coverage_analysis/core/analyzer.py`
+    *   **Logic Update:** In the `analyze` function, create a boolean mask `blind_spot_mask = coverage_db < min_gain_threshold`.
+*   **Target File:** `antenna_coverage_analysis/visualization/plots.py` (or `example_analysis.py`)
+    *   **Plotting:** When plotting the 2D coverage map, overlay the `blind_spot_mask` using a specific color (e.g., semi-transparent red) or hatching to clearly mark areas of no coverage.
+*   **Target File:** `ekf_geolocation/core/ekf.py`
+    *   **Metric Calculation:** Add a function `calculate_convergence_metrics(errors, threshold)`.
+    *   **New Metric:** Implement "Error after N valid measurements". Find the index where `cumulative_valid_measurements == N`, and report the position error at that index.
