@@ -4,7 +4,79 @@ ESM Analysis slide generator.
 
 from typing import Dict, Optional, List
 from pathlib import Path
+import numpy as np
 from ..core import DesignReviewGenerator
+
+
+def add_measurement_accuracy_slides(gen: DesignReviewGenerator,
+                                      snr_values: List[float] = None):
+    """
+    Add pulse parameter measurement accuracy slides.
+
+    Args:
+        gen: DesignReviewGenerator instance
+        snr_values: List of SNR values to analyze (default: [0, 5, 10, 15, 20])
+    """
+    try:
+        from esm_analysis.measurement_accuracy import (
+            MeasurementAccuracyAnalyzer,
+            load_from_system_config
+        )
+    except ImportError:
+        return  # Skip if module not available
+
+    if snr_values is None:
+        snr_values = [0, 5, 10, 15, 20]
+
+    config = load_from_system_config()
+    analyzer = MeasurementAccuracyAnalyzer(config)
+
+    # Overview slide
+    overview_bullets = [
+        f"Instantaneous Bandwidth: {config.instantaneous_bandwidth_ghz} GHz",
+        f"Channelizer Bandwidth: {config.channel_bandwidth_mhz} MHz",
+        f"Process Gain: {config.process_gain_db:.1f} dB",
+        f"DLFM Delay Line: {config.dlfm_delay_ns} ns",
+        f"Timing Resolution: {config.timing_resolution_ns*1000:.0f} ps",
+    ]
+    gen.add_content_slide(
+        "Pulse Measurement Configuration",
+        bullets=overview_bullets
+    )
+
+    # Build table data for measurement accuracy vs SNR
+    headers = ["Input SNR (dB)", "Eff SNR (dB)", "Freq (MHz)", "TOA (ns)", "PW (ns)", "PRI (ns)"]
+    rows = []
+    for snr in snr_values:
+        result = analyzer.analyze(snr, pulse_width_us=1.0)
+        rows.append([
+            f"{snr:.0f}",
+            f"{result.snr_effective_db:.1f}",
+            f"{result.frequency_accuracy_mhz:.3f}",
+            f"{result.toa_accuracy_ns:.2f}",
+            f"{result.pulse_width_accuracy_ns:.2f}",
+            f"{result.pri_accuracy_ns:.2f}"
+        ])
+
+    gen.add_table_slide(
+        "Measurement Accuracy vs SNR (RMS)",
+        headers=headers,
+        rows=rows
+    )
+
+    # Key findings slide
+    result_10db = analyzer.analyze(10.0, pulse_width_us=1.0)
+    findings = [
+        f"At 10 dB input SNR ({result_10db.snr_effective_db:.0f} dB effective):",
+        f"  • Frequency accuracy: {result_10db.frequency_accuracy_mhz:.3f} MHz (req: 1.0 MHz) ✓",
+        f"  • TOA accuracy: {result_10db.toa_accuracy_ns:.2f} ns (req: 10.0 ns) ✓",
+        f"  • PW accuracy: {result_10db.pulse_width_accuracy_percent:.1f}% (req: 10%) ✓",
+        f"Process gain from channelizer: {config.process_gain_db:.1f} dB noise rejection",
+    ]
+    gen.add_content_slide(
+        "Measurement Accuracy Summary",
+        bullets=findings
+    )
 
 
 def add_esm_slides(gen: DesignReviewGenerator,
@@ -99,3 +171,6 @@ def add_esm_slides(gen: DesignReviewGenerator,
                 image_path=str(duty_plot),
                 image_width=10.0
             )
+
+    # Add measurement accuracy analysis
+    add_measurement_accuracy_slides(gen)

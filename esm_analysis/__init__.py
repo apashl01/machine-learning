@@ -10,6 +10,7 @@ Modules:
     scheduling: Dwell scheduling algorithms
     visualization: Plotting and reporting functions
     utils: Unit conversions and helper functions
+    measurement_accuracy: Pulse parameter measurement accuracy analysis (DLFM, TOA, PW)
 """
 
 __version__ = "1.0.0"
@@ -19,6 +20,12 @@ from .config import load_config, SystemConfig, ThreatLibrary
 from .core import SNRCalculator, ThreatCategorizer, DetectionModel
 from .scheduling import DwellScheduler
 from .visualization import ESMPlotter
+from .measurement_accuracy import (
+    MeasurementConfig,
+    MeasurementResult,
+    MeasurementAccuracyAnalyzer,
+    analyze_measurement_accuracy
+)
 
 __all__ = [
     'load_config',
@@ -29,4 +36,8 @@ __all__ = [
     'DetectionModel',
     'DwellScheduler',
     'ESMPlotter',
+    'MeasurementConfig',
+    'MeasurementResult',
+    'MeasurementAccuracyAnalyzer',
+    'analyze_measurement_accuracy',
 ]
