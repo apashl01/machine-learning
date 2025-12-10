@@ -5,6 +5,8 @@ RF Chain Configuration Module
 from .loader import (
     load_chain_config,
     load_rf_chain_config,  # Legacy alias
+    load_rf_chain_library,
+    load_from_system_config,
     ChainConfig,
     Component,
     CableComponent,
@@ -12,12 +14,16 @@ from .loader import (
     AttenuatorComponent,
     AntennaComponent,
     ChainType,
-    ComponentType
+    ComponentType,
+    RFChainLibrary,
+    PhysicalPath
 )
 
 __all__ = [
     'load_chain_config',
     'load_rf_chain_config',
+    'load_rf_chain_library',
+    'load_from_system_config',
     'ChainConfig',
     'Component',
     'CableComponent',
@@ -25,5 +31,7 @@ __all__ = [
     'AttenuatorComponent',
     'AntennaComponent',
     'ChainType',
-    'ComponentType'
+    'ComponentType',
+    'RFChainLibrary',
+    'PhysicalPath'
 ]

@@ -148,9 +148,12 @@ components:
     p1db_dbm: 12.0
 
 # -----------------------------------------------------------------------------
-# CHAIN DEFINITIONS
+# CHAIN ARCHETYPES (Template definitions for physical paths)
 # -----------------------------------------------------------------------------
-chains:
+# Archetypes define standard chain configurations by referencing library
+# components. Physical paths then reference these archetypes.
+# -----------------------------------------------------------------------------
+chain_archetypes:
 
   # --- RECEIVER CHAIN: Standard Configuration ---
   rx_standard:
@@ -193,7 +196,7 @@ chains:
       - ref: rg316_0p5m
         order: 4
 
-  # --- TRANSMITTER CHAIN ---
+  # --- TRANSMITTER CHAIN: Standard ---
   tx_standard:
     name: "Standard TX Chain"
     description: "Transmitter chain for ESM/EA applications"
@@ -215,6 +218,24 @@ chains:
       - ref: horn_antenna
         order: 6
 
+  # --- TRANSMITTER CHAIN: Low-Band ---
+  tx_low_band:
+    name: "Low-Band TX Chain"
+    description: "Low frequency transmitter chain (<2 GHz)"
+    type: transmit
+    freq_range_ghz: [0.5, 2.0]
+    source_power_dbm: 0.0
+
+    components:
+      - ref: rg316_0p5m
+        order: 1
+      - ref: driver_amp
+        order: 2
+      - ref: power_amp
+        order: 3
+      - ref: rg316_1m
+        order: 4
+
   # --- MINIMAL RECEIVE CHAIN (for sensitivity comparison) ---
   rx_minimal:
     name: "Minimal RX Chain"
@@ -229,6 +250,70 @@ chains:
         order: 2
       - ref: lna_high_gain
         order: 3
+
+# -----------------------------------------------------------------------------
+# PHYSICAL PATHS (Actual hardware instances)
+# -----------------------------------------------------------------------------
+# Maps physical path IDs to chain archetypes. This allows multiple physical
+# paths to share the same archetype configuration while maintaining unique
+# identifiers for each hardware instance.
+# -----------------------------------------------------------------------------
+paths:
+
+  # --- RX PATHS (2-18 GHz) ---
+  rx_path_1:
+    archetype: rx_with_rfp
+    antenna_position: "nose_left"
+    description: "RX Path 1 - Nose Left (2-18 GHz)"
+
+  rx_path_2:
+    archetype: rx_with_rfp
+    antenna_position: "nose_right"
+    description: "RX Path 2 - Nose Right (2-18 GHz)"
+
+  rx_path_3:
+    archetype: rx_with_rfp
+    antenna_position: "left_fuse_1"
+    description: "RX Path 3 - Left Fuselage 1 (2-18 GHz)"
+
+  rx_path_4:
+    archetype: rx_with_rfp
+    antenna_position: "left_fuse_2"
+    description: "RX Path 4 - Left Fuselage 2 (2-18 GHz)"
+
+  rx_path_5:
+    archetype: rx_with_rfp
+    antenna_position: "left_fuse_3"
+    description: "RX Path 5 - Left Fuselage 3 (2-18 GHz)"
+
+  rx_path_6:
+    archetype: rx_with_rfp
+    antenna_position: "left_fuse_4"
+    description: "RX Path 6 - Left Fuselage 4 (2-18 GHz)"
+
+  rx_path_7:
+    archetype: rx_with_rfp
+    antenna_position: "right_fuse"
+    description: "RX Path 7 - Right Fuselage (2-18 GHz)"
+
+  # --- RX PATH (<2 GHz Low-Band) ---
+  rx_path_low_band:
+    archetype: rx_standard
+    antenna_position: "low_band_rx"
+    description: "RX Path 8 - Low-Band (<2 GHz)"
+    # Override freq range for low-band
+    freq_range_ghz: [0.5, 2.0]
+
+  # --- TX PATHS ---
+  tx_path_mid_band:
+    archetype: tx_standard
+    antenna_position: "nose_center"
+    description: "TX Path 1 - Mid-Band Horn (2-18 GHz)"
+
+  tx_path_low_band:
+    archetype: tx_low_band
+    antenna_position: "low_band_tx"
+    description: "TX Path 2 - Low-Band (<2 GHz)"
 
 # -----------------------------------------------------------------------------
 # ANALYSIS SETTINGS

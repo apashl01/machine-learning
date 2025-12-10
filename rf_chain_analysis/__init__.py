@@ -15,6 +15,8 @@ __author__ = "Andrew's Analysis Tools"
 from .config import (
     load_chain_config,
     load_rf_chain_config,
+    load_rf_chain_library,
+    load_from_system_config,
     ChainConfig,
     Component,
     CableComponent,
@@ -22,7 +24,9 @@ from .config import (
     AttenuatorComponent,
     AntennaComponent,
     ChainType,
-    ComponentType
+    ComponentType,
+    RFChainLibrary,
+    PhysicalPath
 )
 from .core.analyzer import (
     analyze_rf_chain,
@@ -38,6 +42,8 @@ __all__ = [
     # Config
     'load_chain_config',
     'load_rf_chain_config',
+    'load_rf_chain_library',
+    'load_from_system_config',
     'ChainConfig',
     'Component',
     'CableComponent',
@@ -46,6 +52,8 @@ __all__ = [
     'AntennaComponent',
     'ChainType',
     'ComponentType',
+    'RFChainLibrary',
+    'PhysicalPath',
     # Analysis
     'analyze_rf_chain',
     'RFChainAnalyzer',

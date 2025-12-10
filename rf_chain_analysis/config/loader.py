@@ -355,6 +355,258 @@ def load_rf_chain_config(filepath: Union[str, Path] = None) -> ChainConfig:
     return load_chain_config(filepath)
 
 
+# =============================================================================
+# ARCHETYPE & PATH LOADING (Phase 2 Enhancement)
+# =============================================================================
+
+@dataclass
+class PhysicalPath:
+    """Physical RF path instance referencing an archetype."""
+    path_id: str
+    archetype_id: str
+    antenna_position: str
+    description: str
+    freq_range_ghz: Optional[List[float]] = None  # Override archetype freq range
+
+
+@dataclass
+class RFChainLibrary:
+    """
+    Complete RF chain library with components, archetypes, and physical paths.
+
+    Implements the "Library & Archetype" pattern:
+    - components: Reusable component definitions
+    - archetypes: Standard chain configurations referencing components
+    - paths: Physical hardware instances referencing archetypes
+    """
+    components: Dict[str, dict]  # Component ID -> raw component data
+    archetypes: Dict[str, dict]  # Archetype ID -> archetype definition
+    paths: Dict[str, PhysicalPath]  # Path ID -> PhysicalPath
+
+    def get_archetype_chain(self, archetype_id: str) -> ChainConfig:
+        """
+        Get a ChainConfig for a specific archetype.
+
+        Args:
+            archetype_id: ID of the archetype (e.g., 'rx_standard', 'tx_standard')
+
+        Returns:
+            ChainConfig with resolved components
+        """
+        if archetype_id not in self.archetypes:
+            raise ValueError(f"Unknown archetype: {archetype_id}")
+
+        arch_data = self.archetypes[archetype_id]
+        return self._build_chain_from_archetype(archetype_id, arch_data)
+
+    def get_path_chain(self, path_id: str) -> ChainConfig:
+        """
+        Get a ChainConfig for a specific physical path.
+
+        Args:
+            path_id: ID of the physical path (e.g., 'rx_path_1')
+
+        Returns:
+            ChainConfig with resolved components and path-specific overrides
+        """
+        if path_id not in self.paths:
+            raise ValueError(f"Unknown path: {path_id}")
+
+        path = self.paths[path_id]
+        arch_data = self.archetypes[path.archetype_id].copy()
+
+        # Apply path-specific overrides
+        if path.freq_range_ghz:
+            arch_data['freq_range_ghz'] = path.freq_range_ghz
+
+        # Update name/description with path info
+        arch_data['name'] = f"{arch_data.get('name', 'Chain')} - {path.path_id}"
+        arch_data['description'] = path.description
+
+        return self._build_chain_from_archetype(path_id, arch_data)
+
+    def _build_chain_from_archetype(self, chain_id: str, arch_data: dict) -> ChainConfig:
+        """Build a ChainConfig from archetype data, resolving component references."""
+        chain_type_str = arch_data.get('type', 'receive')
+        chain_type = ChainType(chain_type_str)
+
+        freq_range = arch_data.get('freq_range_ghz', [2.0, 18.0])
+        if isinstance(freq_range, list):
+            freq_range = [_to_float(f) for f in freq_range]
+
+        # Resolve component references
+        components = {}
+        for comp_ref in arch_data.get('components', []):
+            ref_id = comp_ref.get('ref')
+            order = comp_ref.get('order', 0)
+
+            if ref_id not in self.components:
+                raise ValueError(f"Unknown component reference: {ref_id}")
+
+            # Get component data and add order
+            comp_data = self.components[ref_id].copy()
+            comp_data['order'] = order
+
+            comp = self._parse_library_component(ref_id, comp_data)
+            components[f"{ref_id}_{order}"] = comp
+
+        return ChainConfig(
+            name=arch_data.get('name', 'RF Chain'),
+            description=arch_data.get('description', ''),
+            chain_type=chain_type,
+            freq_range_ghz=freq_range,
+            components=components,
+            source_power_dbm=_to_float(arch_data.get('source_power_dbm'), 0.0),
+            input_power_range_dbm=None,
+            damage_level_dbm=None
+        )
+
+    def _parse_library_component(self, comp_id: str, data: dict) -> Component:
+        """Parse a component from the library."""
+        comp_type = data.get('type', 'amplifier')
+        name = data.get('name', comp_id)
+        order = _to_int(data.get('order'), 0)
+
+        if comp_type == 'cable':
+            # Handle loss_points format from library
+            loss_points = data.get('loss_points', [])
+            if loss_points and len(loss_points) >= 2:
+                point1 = loss_points[0]
+                point2 = loss_points[1]
+                loss_point1_ghz = _to_float(point1.get('freq_ghz'), 1.0)
+                loss_point1_db = _to_float(point1.get('loss_db'), 0.0)
+                loss_point2_ghz = _to_float(point2.get('freq_ghz'), 18.0)
+                loss_point2_db = _to_float(point2.get('loss_db'), 0.0)
+            else:
+                loss_point1_ghz = 1.0
+                loss_point1_db = 0.0
+                loss_point2_ghz = 18.0
+                loss_point2_db = 0.0
+
+            return CableComponent(
+                id=comp_id,
+                name=name,
+                order=order,
+                loss_point1_ghz=loss_point1_ghz,
+                loss_point1_db=loss_point1_db,
+                loss_point2_ghz=loss_point2_ghz,
+                loss_point2_db=loss_point2_db
+            )
+
+        elif comp_type in ('amplifier', 'integrated'):
+            return AmplifierComponent(
+                id=comp_id,
+                name=name,
+                order=order,
+                gain_db=_to_float(data.get('gain_db'), 0.0),
+                noise_figure_db=_to_float(data.get('noise_figure_db')) if data.get('noise_figure_db') else None,
+                psat_dbm=_to_float(data.get('psat_dbm')) if data.get('psat_dbm') else None
+            )
+
+        elif comp_type == 'attenuator':
+            return AttenuatorComponent(
+                id=comp_id,
+                name=name,
+                order=order,
+                atten_min_db=_to_float(data.get('attenuation_db', data.get('atten_min_db')), 0.0),
+                atten_max_db=_to_float(data.get('attenuation_db', data.get('atten_max_db')), 0.0)
+            )
+
+        elif comp_type in ('filter', 'switch'):
+            # Treat filters and switches as attenuators (passive loss)
+            loss = _to_float(data.get('insertion_loss_db'), 0.0)
+            return AttenuatorComponent(
+                id=comp_id,
+                name=name,
+                order=order,
+                atten_min_db=loss,
+                atten_max_db=loss
+            )
+
+        elif comp_type == 'antenna':
+            return AntennaComponent(
+                id=comp_id,
+                name=name,
+                order=order,
+                gain_db=_to_float(data.get('gain_dbi', data.get('gain_db')), 0.0)
+            )
+
+        else:
+            # Default to amplifier
+            return AmplifierComponent(
+                id=comp_id,
+                name=name,
+                order=order,
+                gain_db=_to_float(data.get('gain_db'), 0.0),
+                noise_figure_db=None,
+                psat_dbm=None
+            )
+
+    def list_archetypes(self) -> List[str]:
+        """List all available archetype IDs."""
+        return list(self.archetypes.keys())
+
+    def list_paths(self) -> List[str]:
+        """List all available physical path IDs."""
+        return list(self.paths.keys())
+
+    def get_paths_by_type(self, chain_type: str) -> List[str]:
+        """Get path IDs filtered by chain type ('receive' or 'transmit')."""
+        result = []
+        for path_id, path in self.paths.items():
+            arch = self.archetypes.get(path.archetype_id, {})
+            if arch.get('type') == chain_type:
+                result.append(path_id)
+        return result
+
+
+def load_rf_chain_library(filepath: Union[str, Path] = None) -> RFChainLibrary:
+    """
+    Load complete RF chain library with components, archetypes, and paths.
+
+    This is the preferred method for loading RF chain configurations in Phase 2.
+
+    Args:
+        filepath: Path to rf_chains.yaml. If None, uses default location.
+
+    Returns:
+        RFChainLibrary with all definitions loaded.
+    """
+    if filepath is None:
+        config_dir = Path(__file__).parent
+        filepath = config_dir / "rf_chains.yaml"
+
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(f"RF chains library file not found: {filepath}")
+
+    with open(filepath, 'r') as f:
+        data = yaml.safe_load(f) or {}
+
+    # Load component library
+    components = data.get('components', {})
+
+    # Load archetypes (try both new and legacy names)
+    archetypes = data.get('chain_archetypes', data.get('chains', {}))
+
+    # Load physical paths
+    paths = {}
+    for path_id, path_data in data.get('paths', {}).items():
+        paths[path_id] = PhysicalPath(
+            path_id=path_id,
+            archetype_id=path_data.get('archetype', ''),
+            antenna_position=path_data.get('antenna_position', ''),
+            description=path_data.get('description', ''),
+            freq_range_ghz=path_data.get('freq_range_ghz')
+        )
+
+    return RFChainLibrary(
+        components=components,
+        archetypes=archetypes,
+        paths=paths
+    )
+
+
 def load_from_system_config(chain_type: str = 'receive') -> ChainConfig:
     """
     Load RF chain configuration from shared system_config.yaml.
