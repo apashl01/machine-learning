@@ -17,7 +17,7 @@ Modules:
 __version__ = "1.0.0"
 __author__ = "Andrew's Analysis Tools"
 
-from .config import load_config, SystemConfig, ThreatLibrary
+from .config import load_config, SystemConfig, ThreatLibrary, compute_dynamic_pfa
 from .core import (
     SNRCalculator,
     ThreatCategorizer,
@@ -46,6 +46,7 @@ __all__ = [
     'load_config',
     'SystemConfig',
     'ThreatLibrary',
+    'compute_dynamic_pfa',
     'SNRCalculator',
     'ThreatCategorizer',
     'DetectionModel',

@@ -587,6 +587,47 @@ def create_analysis_requirements(
 
 
 # =============================================================================
+# DYNAMIC PFA DERIVATION
+# =============================================================================
+
+def compute_dynamic_pfa(snr_threshold_db: float, noise_floor_dbm: float = None,
+                         bandwidth_hz: float = 20.0e6,
+                         noise_figure_db: float = 6.0) -> float:
+    """
+    Compute probability of false alarm (Pfa) from SNR threshold.
+
+    This ensures Pfa is derived from the user-specified threshold setting
+    rather than using a hardcoded value. Changes to snr_threshold_db will
+    automatically propagate to affect detection probability calculations.
+
+    Args:
+        snr_threshold_db: SNR threshold in dB above noise floor
+        noise_floor_dbm: Noise floor in dBm. If None, calculated from bandwidth/NF.
+        bandwidth_hz: Receiver bandwidth for noise floor calculation
+        noise_figure_db: System noise figure in dB
+
+    Returns:
+        Probability of false alarm per sample
+    """
+    import math
+    from scipy import special
+
+    # Calculate noise floor if not provided
+    if noise_floor_dbm is None:
+        # Noise floor (dBm) = kTB + NF = -174 + 10*log10(B) + NF
+        noise_floor_dbm = -174 + 10 * math.log10(bandwidth_hz) + noise_figure_db
+
+    # Convert SNR threshold to sigma (standard deviations of noise)
+    # threshold_db = 20*log10(threshold_sigma) => threshold_sigma = 10^(threshold_db/20)
+    threshold_sigma = 10 ** (snr_threshold_db / 20)
+
+    # Pfa for Gaussian noise = erfc(threshold_sigma / sqrt(2)) / 2
+    pfa = special.erfc(threshold_sigma / math.sqrt(2)) / 2
+
+    return float(pfa)
+
+
+# =============================================================================
 # SHARED SYSTEM CONFIG INTEGRATION
 # =============================================================================
 
@@ -601,12 +642,16 @@ def load_receiver_from_system_config(
     the ESM analysis uses consistent noise floor and sensitivity values
     calculated from ADC + RF chain specifications.
 
+    Phase 2 Update: Now calculates Pfa dynamically from SNR threshold
+    using compute_dynamic_pfa(). Changes to snr_threshold_db will
+    automatically propagate to detection probability calculations.
+
     Args:
         bandwidth_hz: Receiver bandwidth for noise calculations
         snr_threshold_db: Required SNR threshold for detection
 
     Returns:
-        ReceiverConfig with sensitivity derived from shared system config
+        ReceiverConfig with sensitivity and Pfa derived from shared system config
     """
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -626,6 +671,14 @@ def load_receiver_from_system_config(
 
     # Get antenna configuration
     ant = shared.antennas
+    noise_figure_db = shared.rf_chain.cascade_noise_figure_db
+
+    # Calculate Pfa dynamically from SNR threshold
+    pfa = compute_dynamic_pfa(
+        snr_threshold_db=snr_threshold_db,
+        bandwidth_hz=bandwidth_hz,
+        noise_figure_db=noise_figure_db
+    )
 
     return ReceiverConfig(
         freq_min_hz=shared.freq_min_ghz * 1e9,
@@ -636,10 +689,11 @@ def load_receiver_from_system_config(
             azimuth_coverage_deg=ant.esm_beamwidth_deg,
             elevation_coverage_deg=90.0
         ),
-        noise_figure_db=shared.rf_chain.cascade_noise_figure_db,
+        noise_figure_db=noise_figure_db,
         bandwidth_hz=bandwidth_hz,
         system_losses_db=3.0,  # Implementation losses
-        snr_threshold_db=snr_threshold_db
+        snr_threshold_db=snr_threshold_db,
+        pfa=pfa  # Dynamic Pfa derived from SNR threshold
     )
 
 
