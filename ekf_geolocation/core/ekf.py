@@ -132,6 +132,77 @@ def run_ekf(config, measurements: np.ndarray, trajectory,
     )
 
 
+@dataclass
+class ConvergenceMetrics:
+    """Convergence metrics for EKF geolocation (Phase 2 Enhancement)."""
+    time_to_convergence_s: Optional[float]  # Time when error first drops below threshold
+    error_after_n_measurements: float       # Error after N valid measurements
+    n_measurements_target: int              # The N value used (e.g., 10)
+    converged: bool                         # Whether convergence was achieved
+    final_error_m: float                    # Error at end of simulation
+    min_error_m: float                      # Minimum error achieved
+    convergence_index: Optional[int]        # Step index where convergence occurred
+
+
+def calculate_convergence_metrics(
+    errors: np.ndarray,
+    measurement_valid: np.ndarray,
+    threshold_m: float = 1000.0,
+    n_measurements: int = 10,
+    time_per_step_s: float = 1.0
+) -> ConvergenceMetrics:
+    """
+    Calculate EKF convergence metrics.
+
+    Phase 2 Enhancement: Adds "Error after N valid measurements" metric
+    which provides a more robust measure of system settling time than
+    just "Time to Convergence".
+
+    Args:
+        errors: Position errors at each step (meters) [N_steps]
+        measurement_valid: Boolean array indicating valid measurements [N_steps]
+        threshold_m: Convergence threshold in meters (default 1000m = 1km)
+        n_measurements: Number of valid measurements for N-measurement metric
+        time_per_step_s: Time between steps in seconds
+
+    Returns:
+        ConvergenceMetrics with comprehensive convergence analysis.
+    """
+    n_steps = len(errors)
+
+    # Find convergence time (first time error drops below threshold)
+    converged_idx = np.where(errors < threshold_m)[0]
+    if len(converged_idx) > 0:
+        convergence_index = int(converged_idx[0])
+        time_to_convergence = convergence_index * time_per_step_s
+        converged = True
+    else:
+        convergence_index = None
+        time_to_convergence = None
+        converged = False
+
+    # Calculate cumulative valid measurements
+    cumulative_valid = np.cumsum(measurement_valid.astype(int))
+
+    # Find error after N valid measurements
+    n_meas_idx = np.where(cumulative_valid >= n_measurements)[0]
+    if len(n_meas_idx) > 0:
+        error_after_n = float(errors[n_meas_idx[0]])
+    else:
+        # Not enough valid measurements - use final error
+        error_after_n = float(errors[-1])
+
+    return ConvergenceMetrics(
+        time_to_convergence_s=time_to_convergence,
+        error_after_n_measurements=error_after_n,
+        n_measurements_target=n_measurements,
+        converged=converged,
+        final_error_m=float(errors[-1]),
+        min_error_m=float(np.min(errors)),
+        convergence_index=convergence_index
+    )
+
+
 def _measurement_model_with_offset(x_emitter_ecef: np.ndarray,
                                    interferometer_ecef: np.ndarray,
                                    platform_lat: float,

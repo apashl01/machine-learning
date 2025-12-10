@@ -14,7 +14,9 @@ from .interferometer import (
 )
 from .ekf import (
     run_ekf,
-    EKFResult
+    EKFResult,
+    calculate_convergence_metrics,
+    ConvergenceMetrics
 )
 from .simulation import (
     run_simulation,
@@ -33,6 +35,8 @@ __all__ = [
     'InterferometerData',
     'run_ekf',
     'EKFResult',
+    'calculate_convergence_metrics',
+    'ConvergenceMetrics',
     'run_simulation',
     'run_parameter_sweep',
     'calculate_trajectory_jamming',

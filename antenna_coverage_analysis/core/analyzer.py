@@ -41,6 +41,11 @@ class CoverageResult:
     mean_gain_db: float
     median_gain_db: float
 
+    # Blind spot analysis (Phase 2 Enhancement)
+    blind_spot_mask: Optional[np.ndarray] = None  # True where coverage < threshold
+    blind_spot_threshold_db: Optional[float] = None
+    blind_spot_fraction: Optional[float] = None  # Fraction of coverage that is blind
+
     # Optional group info for multi-band analysis
     group_name: Optional[str] = None
     group_freq_ghz: Optional[float] = None
@@ -178,7 +183,8 @@ class CoverageAnalyzer:
         self,
         antennas: Optional[List[AntennaSpec]] = None,
         group_name: Optional[str] = None,
-        group_freq_ghz: Optional[float] = None
+        group_freq_ghz: Optional[float] = None,
+        blind_spot_threshold_db: Optional[float] = None
     ) -> CoverageResult:
         """
         Perform coverage analysis.
@@ -187,9 +193,12 @@ class CoverageAnalyzer:
             antennas: Optional list of antennas to analyze. If None, uses config.antennas.
             group_name: Optional name for this analysis group.
             group_freq_ghz: Optional frequency for this group (for multi-band analysis).
+            blind_spot_threshold_db: Optional threshold for blind spot detection.
+                If provided, creates a boolean mask where coverage < threshold.
+                If None, uses -10 dBi as default threshold.
 
         Returns:
-            CoverageResult with combined coverage data.
+            CoverageResult with combined coverage data and optional blind spot mask.
         """
         # Use provided antennas or default to config.antennas
         if antennas is None:
@@ -252,6 +261,12 @@ class CoverageAnalyzer:
         valid_mask = np.isfinite(coverage_db)
         coverage_valid = coverage_db[valid_mask]
 
+        # Calculate blind spot mask (Phase 2 Enhancement)
+        # Default threshold: -10 dBi (areas with very poor coverage)
+        threshold = blind_spot_threshold_db if blind_spot_threshold_db is not None else -10.0
+        blind_mask = coverage_db < threshold
+        blind_fraction = np.sum(blind_mask) / blind_mask.size if blind_mask.size > 0 else 0.0
+
         return CoverageResult(
             config=self.config,
             azimuth=azimuth,
@@ -262,6 +277,9 @@ class CoverageAnalyzer:
             min_gain_db=float(np.min(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
             mean_gain_db=float(np.mean(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
             median_gain_db=float(np.median(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
+            blind_spot_mask=blind_mask,
+            blind_spot_threshold_db=threshold,
+            blind_spot_fraction=blind_fraction,
             group_name=group_name,
             group_freq_ghz=group_freq_ghz,
             num_antennas_in_group=len(antennas)
@@ -284,12 +302,14 @@ class CoverageAnalyzer:
                 front_to_back_db=self.config.spiral_antenna.front_to_back_db
             ))
 
-    def analyze_group(self, group: AntennaGroup) -> CoverageResult:
+    def analyze_group(self, group: AntennaGroup,
+                      blind_spot_threshold_db: Optional[float] = None) -> CoverageResult:
         """
         Analyze coverage for a specific antenna group.
 
         Args:
             group: AntennaGroup containing antennas to analyze.
+            blind_spot_threshold_db: Optional threshold for blind spot detection.
 
         Returns:
             CoverageResult for this group.
@@ -297,7 +317,8 @@ class CoverageAnalyzer:
         return self.analyze(
             antennas=group.antennas,
             group_name=group.name,
-            group_freq_ghz=group.center_freq_ghz
+            group_freq_ghz=group.center_freq_ghz,
+            blind_spot_threshold_db=blind_spot_threshold_db
         )
 
     def analyze_all_groups(self) -> dict:
@@ -349,6 +370,15 @@ def print_statistics(result: CoverageResult) -> str:
     for thresh in thresholds:
         coverage_fraction = np.sum(result.coverage_db >= (result.max_gain_db + thresh)) / result.coverage_db.size
         lines.append(f"  Coverage within {abs(thresh):.0f} dB of peak: {coverage_fraction*100:.1f}%")
+
+    # Blind spot statistics (Phase 2 Enhancement)
+    if result.blind_spot_mask is not None:
+        lines.append("")
+        lines.append("BLIND SPOT ANALYSIS:")
+        lines.append(f"  Threshold: {result.blind_spot_threshold_db:.1f} dBi")
+        lines.append(f"  Blind spot coverage: {result.blind_spot_fraction*100:.1f}%")
+        if result.blind_spot_fraction > 0.1:
+            lines.append("  WARNING: >10% of coverage area has poor gain")
 
     lines.append("=" * 60)
     return "\n".join(lines)

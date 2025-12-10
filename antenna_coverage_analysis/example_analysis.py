@@ -112,13 +112,26 @@ def generate_plots(result: CoverageResult):
 
     AZ, EL = np.meshgrid(result.azimuth, result.elevation)
 
-    # Plot 1: 2D Coverage map
+    # Plot 1: 2D Coverage map with blind spot overlay
     ax1 = axes[0, 0]
     c = ax1.contourf(AZ, EL, result.coverage_db, levels=20, cmap='jet')
     plt.colorbar(c, ax=ax1, label='Gain (dBi)')
+
+    # Overlay blind spots (Phase 2 Enhancement)
+    if result.blind_spot_mask is not None and np.any(result.blind_spot_mask):
+        # Create a semi-transparent red overlay for blind spots
+        ax1.contourf(AZ, EL, result.blind_spot_mask.astype(float),
+                     levels=[0.5, 1.5], colors=['red'], alpha=0.4)
+        # Add hatching for additional emphasis
+        ax1.contour(AZ, EL, result.blind_spot_mask.astype(float),
+                    levels=[0.5], colors=['darkred'], linewidths=1.5)
+
     ax1.set_xlabel('Azimuth (degrees)')
     ax1.set_ylabel('Elevation (degrees)')
-    ax1.set_title('Combined Coverage Map - Max Gain (dBi)')
+    title = 'Combined Coverage Map - Max Gain (dBi)'
+    if result.blind_spot_mask is not None:
+        title += f'\n(Red overlay: blind spots < {result.blind_spot_threshold_db:.0f} dBi)'
+    ax1.set_title(title)
     ax1.grid(True, alpha=0.3)
     # Mark forward direction
     ax1.plot(0, 0, 'w*', markersize=15, linewidth=2)
@@ -246,13 +259,24 @@ def generate_group_plot(result: CoverageResult, group_key: str):
     else:
         cmap = 'Oranges' if 'low' in group_key else 'hot'
 
-    # Plot 1: 2D Coverage map
+    # Plot 1: 2D Coverage map with blind spot overlay
     ax1 = axes[0]
     c = ax1.contourf(AZ, EL, result.coverage_db, levels=20, cmap=cmap)
     plt.colorbar(c, ax=ax1, label='Gain (dBi)')
+
+    # Overlay blind spots (Phase 2 Enhancement)
+    if result.blind_spot_mask is not None and np.any(result.blind_spot_mask):
+        ax1.contourf(AZ, EL, result.blind_spot_mask.astype(float),
+                     levels=[0.5, 1.5], colors=['red'], alpha=0.4)
+        ax1.contour(AZ, EL, result.blind_spot_mask.astype(float),
+                    levels=[0.5], colors=['darkred'], linewidths=1)
+
     ax1.set_xlabel('Azimuth (degrees)')
     ax1.set_ylabel('Elevation (degrees)')
-    ax1.set_title(f'{result.group_name}\nCoverage Map')
+    title = f'{result.group_name}\nCoverage Map'
+    if result.blind_spot_mask is not None and result.blind_spot_fraction > 0:
+        title += f' (blind: {result.blind_spot_fraction*100:.0f}%)'
+    ax1.set_title(title)
     ax1.grid(True, alpha=0.3)
     ax1.plot(0, 0, 'w*', markersize=12)
 
@@ -325,10 +349,19 @@ def generate_comparison_plot(group_results: dict):
         cmap = cmaps.get(key, 'jet')
         c = ax.contourf(AZ, EL, result.coverage_db, levels=20, cmap=cmap)
         plt.colorbar(c, ax=ax, label='Gain (dBi)')
+
+        # Overlay blind spots (Phase 2 Enhancement)
+        if result.blind_spot_mask is not None and np.any(result.blind_spot_mask):
+            ax.contourf(AZ, EL, result.blind_spot_mask.astype(float),
+                        levels=[0.5, 1.5], colors=['red'], alpha=0.35)
+
         ax.set_xlabel('Azimuth (deg)')
         ax.set_ylabel('Elevation (deg)')
-        ax.set_title(f'{result.group_name}\n({result.num_antennas_in_group} ant, '
-                     f'max={result.max_gain_db:.1f} dB)')
+        title = f'{result.group_name}\n({result.num_antennas_in_group} ant, max={result.max_gain_db:.1f} dB'
+        if result.blind_spot_fraction and result.blind_spot_fraction > 0.01:
+            title += f', blind={result.blind_spot_fraction*100:.0f}%'
+        title += ')'
+        ax.set_title(title)
         ax.grid(True, alpha=0.3)
         ax.plot(0, 0, 'w*', markersize=10)
 
