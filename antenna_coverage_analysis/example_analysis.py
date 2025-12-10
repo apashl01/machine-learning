@@ -3,6 +3,7 @@
 UAV Antenna Coverage Analysis Example
 
 Demonstrates multi-antenna coverage analysis matching MATLAB uav_antenna_coverage.m.
+Supports multi-band (Low/Mid) and multi-role (RX/TX) analysis.
 """
 
 import sys
@@ -16,7 +17,9 @@ import matplotlib.pyplot as plt
 from antenna_coverage_analysis import (
     load_uav_config,
     analyze_coverage,
-    print_statistics
+    print_statistics,
+    CoverageAnalyzer,
+    CoverageResult
 )
 
 
@@ -34,33 +37,75 @@ def main():
     print(f"  Frequency: {config.frequency_ghz:.2f} GHz")
     print(f"  RX Antennas: {config.num_rx_antennas}")
     print(f"  TX Antennas: {config.num_tx_antennas}")
-    print(f"  Spiral beamwidth: {config.spiral_antenna.beamwidth_deg}°")
+    print(f"  Total Antennas: {config.total_antennas}")
+    print(f"  Spiral beamwidth: {config.spiral_antenna.beamwidth_deg}deg")
     print(f"  Spiral gain: {config.spiral_antenna.gain_dbi} dBi")
 
     print("\nRX Antenna Positions:")
     for ant in config.rx_antennas:
-        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}°, "
+        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}deg, "
               f"band={ant.freq_band}")
 
     print("\nTX Antenna Positions:")
     for ant in config.tx_antennas:
-        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}°, "
+        print(f"  {ant.name}: pos={ant.position}, orient={ant.orientation}deg, "
               f"band={ant.freq_band}, gain={ant.gain_dbi} dBi")
 
-    # Analyze coverage
-    print("\nCalculating combined coverage...")
+    # Create analyzer
+    analyzer = CoverageAnalyzer(config)
+
+    # =========================================================================
+    # Combined Analysis (Legacy - all antennas merged)
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("COMBINED COVERAGE ANALYSIS (All RX Antennas)")
+    print("=" * 70)
+
     result = analyze_coverage(config)
-
-    # Print statistics
     print("\n" + print_statistics(result))
-
-    # Generate plots
     generate_plots(result)
+
+    # =========================================================================
+    # Multi-Band/Multi-Role Analysis (Phase 2 Enhancement)
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("MULTI-BAND/MULTI-ROLE COVERAGE ANALYSIS")
+    print("=" * 70)
+
+    # Get antenna groups
+    groups = config.get_antenna_groups()
+    nonempty_groups = config.get_nonempty_groups()
+
+    print(f"\nAntenna Groups Detected:")
+    for key, group in groups.items():
+        n = len(group.antennas)
+        status = f"{n} antennas" if n > 0 else "(empty)"
+        print(f"  {group.name}: {status}")
+
+    # Analyze each non-empty group
+    if nonempty_groups:
+        print(f"\nAnalyzing {len(nonempty_groups)} non-empty groups...")
+        group_results = analyzer.analyze_all_groups()
+
+        # Generate group-specific plots
+        for key, group_result in group_results.items():
+            print(f"\n--- {group_result.group_name} ---")
+            print(f"  Antennas: {group_result.num_antennas_in_group}")
+            print(f"  Center Frequency: {group_result.group_freq_ghz:.1f} GHz")
+            print(f"  Max Gain: {group_result.max_gain_db:.2f} dB")
+            print(f"  Min Gain: {group_result.min_gain_db:.2f} dB")
+            print(f"  Mean Gain: {group_result.mean_gain_db:.2f} dB")
+
+            # Generate individual plot for this group
+            generate_group_plot(group_result, key)
+
+        # Generate comparison plot showing all groups
+        generate_comparison_plot(group_results)
 
     print("\nAnalysis complete!")
 
 
-def generate_plots(result):
+def generate_plots(result: CoverageResult):
     """Generate coverage plots matching MATLAB."""
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -85,7 +130,7 @@ def generate_plots(result):
     ax2.plot(result.azimuth, result.coverage_db[el_idx, :], 'b-', linewidth=2)
     ax2.set_xlabel('Azimuth (degrees)')
     ax2.set_ylabel('Gain (dB)')
-    ax2.set_title('Coverage - Azimuth Cut (Elevation = 0°)')
+    ax2.set_title('Coverage - Azimuth Cut (Elevation = 0deg)')
     ax2.set_xlim([-180, 180])
     ax2.grid(True, alpha=0.3)
     ax2.axhline(result.max_gain_db - 3, color='r', linestyle='--', label='-3 dB')
@@ -97,7 +142,7 @@ def generate_plots(result):
     ax3.plot(result.elevation, result.coverage_db[:, az_idx], 'r-', linewidth=2)
     ax3.set_xlabel('Elevation (degrees)')
     ax3.set_ylabel('Gain (dB)')
-    ax3.set_title('Coverage - Elevation Cut (Azimuth = 0° - Forward)')
+    ax3.set_title('Coverage - Elevation Cut (Azimuth = 0deg - Forward)')
     ax3.set_xlim([-90, 90])
     ax3.grid(True, alpha=0.3)
     ax3.axhline(result.max_gain_db - 3, color='b', linestyle='--', label='-3 dB')
@@ -181,6 +226,126 @@ def generate_plots(result):
     filepath = output_dir / "uav_coverage_analysis.png"
     fig.savefig(filepath, dpi=150, bbox_inches='tight')
     print(f"\nPlot saved to: {filepath}")
+
+    try:
+        plt.show()
+    except Exception:
+        print("(Non-GUI environment - plot saved but not displayed)")
+
+
+def generate_group_plot(result: CoverageResult, group_key: str):
+    """Generate coverage plot for a specific antenna group."""
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    AZ, EL = np.meshgrid(result.azimuth, result.elevation)
+
+    # Color scheme based on role
+    if 'rx' in group_key:
+        cmap = 'Blues' if 'low' in group_key else 'viridis'
+    else:
+        cmap = 'Oranges' if 'low' in group_key else 'hot'
+
+    # Plot 1: 2D Coverage map
+    ax1 = axes[0]
+    c = ax1.contourf(AZ, EL, result.coverage_db, levels=20, cmap=cmap)
+    plt.colorbar(c, ax=ax1, label='Gain (dBi)')
+    ax1.set_xlabel('Azimuth (degrees)')
+    ax1.set_ylabel('Elevation (degrees)')
+    ax1.set_title(f'{result.group_name}\nCoverage Map')
+    ax1.grid(True, alpha=0.3)
+    ax1.plot(0, 0, 'w*', markersize=12)
+
+    # Plot 2: Azimuth cut at elevation = 0
+    ax2 = axes[1]
+    el_idx = np.argmin(np.abs(result.elevation))
+    ax2.plot(result.azimuth, result.coverage_db[el_idx, :], 'b-', linewidth=2)
+    ax2.set_xlabel('Azimuth (degrees)')
+    ax2.set_ylabel('Gain (dB)')
+    ax2.set_title('Azimuth Cut (El = 0deg)')
+    ax2.set_xlim([-180, 180])
+    ax2.grid(True, alpha=0.3)
+    if np.isfinite(result.max_gain_db):
+        ax2.axhline(result.max_gain_db - 3, color='r', linestyle='--', label='-3 dB')
+        ax2.legend()
+
+    # Plot 3: Elevation cut at azimuth = 0
+    ax3 = axes[2]
+    az_idx = np.argmin(np.abs(result.azimuth))
+    ax3.plot(result.elevation, result.coverage_db[:, az_idx], 'r-', linewidth=2)
+    ax3.set_xlabel('Elevation (degrees)')
+    ax3.set_ylabel('Gain (dB)')
+    ax3.set_title('Elevation Cut (Az = 0deg)')
+    ax3.set_xlim([-90, 90])
+    ax3.grid(True, alpha=0.3)
+    if np.isfinite(result.max_gain_db):
+        ax3.axhline(result.max_gain_db - 3, color='b', linestyle='--', label='-3 dB')
+        ax3.legend()
+
+    fig.suptitle(f'{result.group_name} Coverage ({result.num_antennas_in_group} antennas, '
+                 f'{result.group_freq_ghz:.1f} GHz center)',
+                 fontsize=12, fontweight='bold')
+    plt.tight_layout()
+
+    # Save plot
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(exist_ok=True)
+    filepath = output_dir / f"coverage_{group_key}.png"
+    fig.savefig(filepath, dpi=150, bbox_inches='tight')
+    print(f"  Plot saved: {filepath}")
+
+    plt.close(fig)
+
+
+def generate_comparison_plot(group_results: dict):
+    """Generate comparison plot showing all antenna groups."""
+
+    n_groups = len(group_results)
+    if n_groups == 0:
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
+
+    # Define color schemes for each group
+    cmaps = {
+        'rx_low': 'Blues',
+        'rx_mid': 'viridis',
+        'tx_low': 'Oranges',
+        'tx_mid': 'hot'
+    }
+
+    for idx, (key, result) in enumerate(group_results.items()):
+        if idx >= 4:
+            break
+
+        ax = axes[idx]
+        AZ, EL = np.meshgrid(result.azimuth, result.elevation)
+
+        cmap = cmaps.get(key, 'jet')
+        c = ax.contourf(AZ, EL, result.coverage_db, levels=20, cmap=cmap)
+        plt.colorbar(c, ax=ax, label='Gain (dBi)')
+        ax.set_xlabel('Azimuth (deg)')
+        ax.set_ylabel('Elevation (deg)')
+        ax.set_title(f'{result.group_name}\n({result.num_antennas_in_group} ant, '
+                     f'max={result.max_gain_db:.1f} dB)')
+        ax.grid(True, alpha=0.3)
+        ax.plot(0, 0, 'w*', markersize=10)
+
+    # Hide unused axes
+    for idx in range(len(group_results), 4):
+        axes[idx].set_visible(False)
+
+    fig.suptitle('Multi-Band/Multi-Role Antenna Coverage Comparison',
+                 fontsize=14, fontweight='bold')
+    plt.tight_layout()
+
+    # Save plot
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(exist_ok=True)
+    filepath = output_dir / "coverage_comparison.png"
+    fig.savefig(filepath, dpi=150, bbox_inches='tight')
+    print(f"\nComparison plot saved: {filepath}")
 
     try:
         plt.show()

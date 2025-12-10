@@ -15,8 +15,10 @@ __author__ = "Andrew's Analysis Tools"
 
 from .config import (
     load_uav_config,
+    load_from_system_config,
     UAVCoverageConfig,
     AntennaSpec,
+    AntennaGroup,
     SpiralAntennaSpec,
     HornAntennaSpec
 )
@@ -30,8 +32,10 @@ from .core import (
 
 __all__ = [
     'load_uav_config',
+    'load_from_system_config',
     'UAVCoverageConfig',
     'AntennaSpec',
+    'AntennaGroup',
     'SpiralAntennaSpec',
     'HornAntennaSpec',
     'analyze_coverage',

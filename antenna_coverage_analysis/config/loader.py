@@ -57,6 +57,20 @@ class HornAntennaSpec:
 
 
 @dataclass
+class AntennaGroup:
+    """Group of antennas by role and band."""
+    role: str  # 'rx' or 'tx'
+    band: str  # 'low', 'mid', or 'all'
+    antennas: List[AntennaSpec]
+    center_freq_ghz: float
+
+    @property
+    def name(self) -> str:
+        """Human-readable group name."""
+        return f"{self.role.upper()} {self.band.title()} Band"
+
+
+@dataclass
 class UAVCoverageConfig:
     """Complete UAV antenna coverage configuration."""
     frequency_ghz: float
@@ -90,6 +104,48 @@ class UAVCoverageConfig:
     def total_antennas(self) -> int:
         """Total number of antennas (RX + TX)."""
         return self.num_rx_antennas + self.num_tx_antennas
+
+    def get_antenna_groups(self) -> dict:
+        """
+        Group antennas by role (RX/TX) and band (Low/Mid).
+
+        Returns:
+            Dict with keys: 'rx_low', 'rx_mid', 'tx_low', 'tx_mid'
+            Each value is an AntennaGroup with antennas in that category.
+        """
+        groups = {
+            'rx_low': AntennaGroup('rx', 'low', [], center_freq_ghz=1.0),
+            'rx_mid': AntennaGroup('rx', 'mid', [], center_freq_ghz=10.0),
+            'tx_low': AntennaGroup('tx', 'low', [], center_freq_ghz=1.0),
+            'tx_mid': AntennaGroup('tx', 'mid', [], center_freq_ghz=10.0),
+        }
+
+        # Classify RX antennas
+        for ant in self.rx_antennas:
+            if _is_low_band(ant.freq_band):
+                groups['rx_low'].antennas.append(ant)
+            else:
+                groups['rx_mid'].antennas.append(ant)
+
+        # Classify TX antennas
+        for ant in self.tx_antennas:
+            if _is_low_band(ant.freq_band):
+                groups['tx_low'].antennas.append(ant)
+            else:
+                groups['tx_mid'].antennas.append(ant)
+
+        return groups
+
+    def get_nonempty_groups(self) -> List[AntennaGroup]:
+        """Get list of antenna groups that have at least one antenna."""
+        groups = self.get_antenna_groups()
+        return [g for g in groups.values() if len(g.antennas) > 0]
+
+
+def _is_low_band(freq_band: str) -> bool:
+    """Check if frequency band string indicates low band (<2 GHz)."""
+    band_lower = freq_band.lower()
+    return '<2' in band_lower or 'low' in band_lower or '0-2' in band_lower
 
 
 def _parse_antenna(ant: dict, default_beamwidth: float = 70.0,

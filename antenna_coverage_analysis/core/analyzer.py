@@ -10,7 +10,10 @@ from typing import List, Optional, Tuple
 import math
 import numpy as np
 
-from ..config.loader import UAVCoverageConfig, SpiralAntennaSpec, HornAntennaSpec
+from ..config.loader import (
+    UAVCoverageConfig, SpiralAntennaSpec, HornAntennaSpec,
+    AntennaSpec, AntennaGroup
+)
 
 
 @dataclass
@@ -37,6 +40,11 @@ class CoverageResult:
     min_gain_db: float
     mean_gain_db: float
     median_gain_db: float
+
+    # Optional group info for multi-band analysis
+    group_name: Optional[str] = None
+    group_freq_ghz: Optional[float] = None
+    num_antennas_in_group: int = 0
 
 
 class SpiralPatternGenerator:
@@ -166,13 +174,27 @@ class CoverageAnalyzer:
 
         return az_local, el_local
 
-    def analyze(self) -> CoverageResult:
+    def analyze(
+        self,
+        antennas: Optional[List[AntennaSpec]] = None,
+        group_name: Optional[str] = None,
+        group_freq_ghz: Optional[float] = None
+    ) -> CoverageResult:
         """
         Perform coverage analysis.
+
+        Args:
+            antennas: Optional list of antennas to analyze. If None, uses config.antennas.
+            group_name: Optional name for this analysis group.
+            group_freq_ghz: Optional frequency for this group (for multi-band analysis).
 
         Returns:
             CoverageResult with combined coverage data.
         """
+        # Use provided antennas or default to config.antennas
+        if antennas is None:
+            antennas = self.config.antennas
+
         # Create angular grids
         az_min, az_max = self.config.azimuth_range
         el_min, el_max = self.config.elevation_range
@@ -182,21 +204,24 @@ class CoverageAnalyzer:
         elevation = np.arange(el_min, el_max + res, res)
         AZ, EL = np.meshgrid(azimuth, elevation)
 
-        # Generate base spiral pattern (boresight pointing)
-        base_spiral = self.spiral_gen.generate(AZ, EL)
-
         # Calculate coverage for each antenna
         coverage_db = np.full_like(AZ, -np.inf)
         antenna_patterns = []
 
-        for ant in self.config.antennas:
+        for ant in antennas:
+            # Create pattern generator based on antenna type
+            if ant.antenna_type == 'horn':
+                pattern_gen = self._get_pattern_generator_for_antenna(ant)
+            else:
+                pattern_gen = self.spiral_gen
+
             # Transform to antenna-local coordinates
             az_local, el_local = self._rotate_coordinates(
                 AZ, EL, ant.orientation[0], ant.orientation[1]
             )
 
             # Generate pattern in local coordinates
-            pattern = self.spiral_gen.generate(az_local, el_local)
+            pattern = pattern_gen.generate(az_local, el_local)
 
             antenna_patterns.append(AntennaPattern(
                 azimuth=azimuth,
@@ -207,7 +232,23 @@ class CoverageAnalyzer:
             # Take maximum (best antenna selection)
             coverage_db = np.maximum(coverage_db, pattern)
 
-        # Statistics
+        # Statistics (handle empty antenna list)
+        if len(antennas) == 0:
+            return CoverageResult(
+                config=self.config,
+                azimuth=azimuth,
+                elevation=elevation,
+                coverage_db=np.full_like(AZ, -np.inf),
+                antenna_patterns=[],
+                max_gain_db=-np.inf,
+                min_gain_db=-np.inf,
+                mean_gain_db=-np.inf,
+                median_gain_db=-np.inf,
+                group_name=group_name,
+                group_freq_ghz=group_freq_ghz,
+                num_antennas_in_group=0
+            )
+
         valid_mask = np.isfinite(coverage_db)
         coverage_valid = coverage_db[valid_mask]
 
@@ -217,11 +258,65 @@ class CoverageAnalyzer:
             elevation=elevation,
             coverage_db=coverage_db,
             antenna_patterns=antenna_patterns,
-            max_gain_db=float(np.max(coverage_valid)),
-            min_gain_db=float(np.min(coverage_valid)),
-            mean_gain_db=float(np.mean(coverage_valid)),
-            median_gain_db=float(np.median(coverage_valid))
+            max_gain_db=float(np.max(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
+            min_gain_db=float(np.min(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
+            mean_gain_db=float(np.mean(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
+            median_gain_db=float(np.median(coverage_valid)) if len(coverage_valid) > 0 else -np.inf,
+            group_name=group_name,
+            group_freq_ghz=group_freq_ghz,
+            num_antennas_in_group=len(antennas)
         )
+
+    def _get_pattern_generator_for_antenna(self, ant: AntennaSpec):
+        """Get appropriate pattern generator for an antenna."""
+        if ant.antenna_type == 'horn':
+            return HornPatternGenerator(HornAntennaSpec(
+                beamwidth_deg=ant.beamwidth_deg,
+                gain_dbi=ant.gain_dbi,
+                position=ant.position,
+                orientation=ant.orientation
+            ))
+        else:
+            # Create a spiral generator with this antenna's specific parameters
+            return SpiralPatternGenerator(SpiralAntennaSpec(
+                beamwidth_deg=ant.beamwidth_deg,
+                gain_dbi=ant.gain_dbi,
+                front_to_back_db=self.config.spiral_antenna.front_to_back_db
+            ))
+
+    def analyze_group(self, group: AntennaGroup) -> CoverageResult:
+        """
+        Analyze coverage for a specific antenna group.
+
+        Args:
+            group: AntennaGroup containing antennas to analyze.
+
+        Returns:
+            CoverageResult for this group.
+        """
+        return self.analyze(
+            antennas=group.antennas,
+            group_name=group.name,
+            group_freq_ghz=group.center_freq_ghz
+        )
+
+    def analyze_all_groups(self) -> dict:
+        """
+        Analyze coverage for all antenna groups (RX/TX, Low/Mid bands).
+
+        Returns:
+            Dict mapping group key to CoverageResult.
+            Keys: 'rx_low', 'rx_mid', 'tx_low', 'tx_mid'
+        """
+        groups = self.config.get_antenna_groups()
+        results = {}
+
+        for key, group in groups.items():
+            if len(group.antennas) > 0:
+                results[key] = self.analyze_group(group)
+                print(f"  Analyzed {group.name}: {len(group.antennas)} antennas")
+
+        return results
 
 
 def analyze_coverage(config: UAVCoverageConfig) -> CoverageResult:
