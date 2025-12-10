@@ -174,3 +174,72 @@ def add_esm_slides(gen: DesignReviewGenerator,
 
     # Add measurement accuracy analysis
     add_measurement_accuracy_slides(gen)
+
+    # Add spurious/false alarm analysis
+    add_spurious_analysis_slides(gen)
+
+
+def add_spurious_analysis_slides(gen: DesignReviewGenerator,
+                                   pfa_values: List[float] = None):
+    """
+    Add ADC spurious and false alarm analysis slides.
+
+    Args:
+        gen: DesignReviewGenerator instance
+        pfa_values: List of target Pfa values to analyze
+    """
+    try:
+        from esm_analysis.spurious_analysis import (
+            SpuriousAnalyzer,
+            load_from_system_config as load_spurious_config
+        )
+    except ImportError:
+        return  # Skip if module not available
+
+    if pfa_values is None:
+        pfa_values = [1e-4, 1e-6, 1e-8, 1e-10]
+
+    config = load_spurious_config()
+    analyzer = SpuriousAnalyzer(config)
+
+    # False alarm analysis table
+    headers = ["Target Pfa", "Threshold (σ)", "FA/Dwell", "FA Rate (/s)", "MTBFA (s)"]
+    rows = []
+    for pfa in pfa_values:
+        result = analyzer.analyze_statistical_false_alarm(pfa)
+        rows.append([
+            f"{pfa:.0e}",
+            f"{result.threshold_sigma:.2f}",
+            f"{result.expected_false_alarms_per_dwell:.2f}",
+            f"{result.false_alarm_rate_per_second:.1f}",
+            f"{result.mean_time_between_false_alarms_s:.2f}" if result.mean_time_between_false_alarms_s < 1e6 else ">1e6"
+        ])
+
+    gen.add_table_slide(
+        "Statistical False Alarm Analysis",
+        headers=headers,
+        rows=rows
+    )
+
+    # Deterministic spurious analysis
+    spur_result = analyzer.analyze_deterministic_spurious(
+        signal_freq_ghz=10.0,
+        signal_level_dbm=-30.0
+    )
+
+    # ADC spurious overview
+    spurious_bullets = [
+        f"ADC SFDR: {spur_result.sfdr_db:.1f} dBc",
+        f"Total spurious signals identified: {len(spur_result.spurious_signals)}",
+        f"In-band spurious: {spur_result.num_in_band_spurs}",
+        f"Worst spur: {spur_result.worst_spur_name} at {spur_result.worst_spur_dbfs:.1f} dBFS",
+        "",
+        "Key spurious sources:",
+        "  • ADC harmonics (2nd, 3rd order)",
+        "  • Clock feedthrough",
+        "  • Intermodulation products",
+    ]
+    gen.add_content_slide(
+        "Deterministic Spurious Analysis",
+        bullets=spurious_bullets
+    )

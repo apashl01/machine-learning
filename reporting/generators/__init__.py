@@ -8,7 +8,7 @@ from .adc import add_adc_slides
 from .direction_finding import add_direction_finding_slides
 from .antenna_coverage import add_antenna_coverage_slides
 from .ekf_geolocation import add_ekf_geolocation_slides
-from .esm import add_esm_slides, add_measurement_accuracy_slides
+from .esm import add_esm_slides, add_measurement_accuracy_slides, add_spurious_analysis_slides
 from .compliance import add_compliance_slides
 
 __all__ = [
@@ -21,5 +21,6 @@ __all__ = [
     'add_ekf_geolocation_slides',
     'add_esm_slides',
     'add_measurement_accuracy_slides',
+    'add_spurious_analysis_slides',
     'add_compliance_slides'
 ]

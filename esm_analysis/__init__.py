@@ -11,6 +11,7 @@ Modules:
     visualization: Plotting and reporting functions
     utils: Unit conversions and helper functions
     measurement_accuracy: Pulse parameter measurement accuracy analysis (DLFM, TOA, PW)
+    spurious_analysis: ADC spurious and false alarm analysis
 """
 
 __version__ = "1.0.0"
@@ -26,6 +27,13 @@ from .measurement_accuracy import (
     MeasurementAccuracyAnalyzer,
     analyze_measurement_accuracy
 )
+from .spurious_analysis import (
+    SpuriousConfig,
+    FalseAlarmResult,
+    DeterministicSpuriousResult,
+    SpuriousAnalyzer,
+    analyze_spurious
+)
 
 __all__ = [
     'load_config',
@@ -40,4 +48,9 @@ __all__ = [
     'MeasurementResult',
     'MeasurementAccuracyAnalyzer',
     'analyze_measurement_accuracy',
+    'SpuriousConfig',
+    'FalseAlarmResult',
+    'DeterministicSpuriousResult',
+    'SpuriousAnalyzer',
+    'analyze_spurious',
 ]
