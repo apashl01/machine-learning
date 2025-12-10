@@ -21,6 +21,7 @@ from reporting.generators import (
     add_direction_finding_slides,
     add_antenna_coverage_slides,
     add_ekf_geolocation_slides,
+    add_jamming_slides,
     add_summary_slide
 )
 
@@ -194,6 +195,9 @@ def main():
     }
     add_ekf_geolocation_slides(gen, config=ekf_config, results=ekf_results,
                                 output_dir="ekf_geolocation/output")
+
+    # Jamming Analysis section
+    add_jamming_slides(gen)
 
     # Summary
     add_summary_slide(

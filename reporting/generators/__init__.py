@@ -10,6 +10,7 @@ from .antenna_coverage import add_antenna_coverage_slides
 from .ekf_geolocation import add_ekf_geolocation_slides
 from .esm import add_esm_slides, add_measurement_accuracy_slides, add_spurious_analysis_slides
 from .compliance import add_compliance_slides
+from .jamming import add_jamming_slides
 
 __all__ = [
     'add_title_slide',
@@ -22,5 +23,6 @@ __all__ = [
     'add_esm_slides',
     'add_measurement_accuracy_slides',
     'add_spurious_analysis_slides',
-    'add_compliance_slides'
+    'add_compliance_slides',
+    'add_jamming_slides',
 ]
