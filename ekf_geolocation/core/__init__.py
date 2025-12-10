@@ -19,7 +19,9 @@ from .ekf import (
 from .simulation import (
     run_simulation,
     run_parameter_sweep,
-    SimulationResult
+    calculate_trajectory_jamming,
+    SimulationResult,
+    JammingAnalysisResult
 )
 
 __all__ = [
@@ -33,5 +35,7 @@ __all__ = [
     'EKFResult',
     'run_simulation',
     'run_parameter_sweep',
-    'SimulationResult'
+    'calculate_trajectory_jamming',
+    'SimulationResult',
+    'JammingAnalysisResult'
 ]

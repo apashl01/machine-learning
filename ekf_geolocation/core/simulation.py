@@ -25,6 +25,31 @@ from .ekf import run_ekf, EKFResult
 
 
 @dataclass
+class JammingAnalysisResult:
+    """Container for trajectory jamming analysis results."""
+    js_ratio_db: np.ndarray           # J/S ratio at each time step (dB)
+    jammer_power_dbw: np.ndarray      # Jammer power at radar (dBW)
+    signal_power_dbw: np.ndarray      # Signal power at radar (dBW)
+    off_boresight_deg: np.ndarray     # Off-boresight angle at each step (degrees)
+    burn_through_mask: np.ndarray     # Boolean mask where J/S < 0 (radar burns through)
+
+    @property
+    def mean_js_db(self) -> float:
+        """Mean J/S ratio."""
+        return float(np.mean(self.js_ratio_db))
+
+    @property
+    def min_js_db(self) -> float:
+        """Minimum J/S ratio (worst case)."""
+        return float(np.min(self.js_ratio_db))
+
+    @property
+    def pct_effective(self) -> float:
+        """Percentage of time with effective jamming (J/S > 0 dB)."""
+        return 100.0 * np.sum(self.js_ratio_db > 0) / len(self.js_ratio_db)
+
+
+@dataclass
 class SimulationResult:
     """Container for complete simulation results."""
     config: object                    # SimulationConfig
@@ -34,6 +59,9 @@ class SimulationResult:
     ekf_result: EKFResult             # EKF estimation results
     position_errors: np.ndarray       # Position errors (meters) [N_steps]
     estimated_lla: np.ndarray         # Estimated position in LLA [N_steps x 3]
+
+    # Phase 2: Jamming analysis (optional)
+    jamming_result: Optional[JammingAnalysisResult] = None
 
     @property
     def final_error(self) -> float:
@@ -61,6 +89,13 @@ class SimulationResult:
               f"Lon={self.config.emitter.lon:.6f} deg, "
               f"Alt={self.config.emitter.alt:.2f} m")
 
+        # Jamming analysis summary (if available)
+        if self.jamming_result is not None:
+            print(f"\nSelf-Protect Jamming Analysis:")
+            print(f"  Mean J/S: {self.jamming_result.mean_js_db:.1f} dB")
+            print(f"  Min J/S: {self.jamming_result.min_js_db:.1f} dB")
+            print(f"  Effective jamming: {self.jamming_result.pct_effective:.1f}% of trajectory")
+
 
 @dataclass
 class SweepResult:
@@ -73,13 +108,116 @@ class SweepResult:
     convergence_time: float
 
 
-def run_simulation(config, print_progress: bool = True) -> SimulationResult:
+def calculate_trajectory_jamming(
+    config,
+    trajectory: TrajectoryData,
+    print_progress: bool = True
+) -> Optional[JammingAnalysisResult]:
+    """
+    Calculate self-protect jamming effectiveness over trajectory.
+
+    Computes J/S ratio at each time step based on:
+    - Range from platform to emitter (treated as radar)
+    - Off-boresight angle of jammer antenna relative to emitter
+
+    Args:
+        config: SimulationConfig object
+        trajectory: TrajectoryData with platform positions
+        print_progress: Whether to print progress messages
+
+    Returns:
+        JammingAnalysisResult or None if jamming module unavailable
+    """
+    try:
+        from jamming_analysis import JammerConfig, RadarConfig, JammingAnalyzer
+    except ImportError:
+        if print_progress:
+            print("  Jamming analysis skipped (module not available)")
+        return None
+
+    if print_progress:
+        print("Calculating trajectory jamming effectiveness...")
+
+    # Get ranges to emitter (km -> m)
+    ranges_m = trajectory.distances_from_emitter * 1000.0
+
+    # Calculate off-boresight angles
+    # The jammer antenna points forward (along platform boresight)
+    # Off-boresight = angle between platform boresight and direction to emitter
+
+    # Get emitter position in ECEF
+    emitter_ecef = lla_to_ecef(config.emitter.lat, config.emitter.lon, config.emitter.alt)
+
+    n_steps = len(ranges_m)
+    off_boresight_deg = np.zeros(n_steps)
+
+    for k in range(n_steps):
+        # Vector from platform to emitter
+        platform_pos = trajectory.platform_ecef_cg[k]
+        to_emitter = emitter_ecef - platform_pos
+        to_emitter_norm = to_emitter / (np.linalg.norm(to_emitter) + 1e-10)
+
+        # Platform boresight (forward direction)
+        boresight = trajectory.boresight_ecef[k]
+        boresight_norm = boresight / (np.linalg.norm(boresight) + 1e-10)
+
+        # Angle between boresight and direction to emitter
+        cos_angle = np.clip(np.dot(boresight_norm, to_emitter_norm), -1.0, 1.0)
+        off_boresight_deg[k] = np.degrees(np.arccos(cos_angle))
+
+    # Load jammer config from system_config or use defaults
+    try:
+        from jamming_analysis.core import load_jammer_from_system_config
+        jammer = load_jammer_from_system_config()
+        if print_progress:
+            print("  Loaded jammer config from system_config")
+    except Exception:
+        jammer = JammerConfig(
+            input_power_dbm=50.0,
+            antenna_gain_dbi=12.0,
+            beamwidth_deg=30.0,
+            frequency_ghz=config.emitter.frequency_ghz,
+            platform_rcs_m2=2.0
+        )
+        if print_progress:
+            print("  Using default jammer config")
+
+    # Create radar config from emitter
+    radar = RadarConfig(
+        power_dbw=60.0,  # 1 MW default radar
+        antenna_gain_dbi=35.0,
+        frequency_ghz=config.emitter.frequency_ghz
+    )
+
+    # Run analysis
+    analyzer = JammingAnalyzer(jammer, radar)
+    result = analyzer.analyze(ranges_m, off_boresight_deg)
+
+    jamming_result = JammingAnalysisResult(
+        js_ratio_db=result.js_ratio_db,
+        jammer_power_dbw=result.jammer_power_at_radar_dbw,
+        signal_power_dbw=result.signal_power_at_radar_dbw,
+        off_boresight_deg=off_boresight_deg,
+        burn_through_mask=result.js_ratio_db < 0
+    )
+
+    if print_progress:
+        print(f"  J/S range: {jamming_result.min_js_db:.1f} to "
+              f"{np.max(jamming_result.js_ratio_db):.1f} dB")
+        print(f"  Effective jamming: {jamming_result.pct_effective:.1f}% of trajectory")
+
+    return jamming_result
+
+
+def run_simulation(config, print_progress: bool = True,
+                   include_jamming: bool = True) -> SimulationResult:
     """
     Run complete EKF geolocation simulation.
 
     Args:
         config: SimulationConfig object
         print_progress: Whether to print progress messages
+        include_jamming: Whether to include jamming analysis (Phase 2)
 
     Returns:
         SimulationResult object with all data
@@ -127,6 +265,11 @@ def run_simulation(config, print_progress: bool = True) -> SimulationResult:
         position_errors[k] = np.linalg.norm(ekf_result.x_history[k] - emitter_ecef)
         estimated_lla[k] = ecef_to_lla(ekf_result.x_history[k])
 
+    # Step 6: Calculate jamming effectiveness over trajectory (Phase 2)
+    jamming_result = None
+    if include_jamming:
+        jamming_result = calculate_trajectory_jamming(config, trajectory, print_progress)
+
     result = SimulationResult(
         config=config,
         trajectory=trajectory,
@@ -134,7 +277,8 @@ def run_simulation(config, print_progress: bool = True) -> SimulationResult:
         interferometer_data=interferometer_data,
         ekf_result=ekf_result,
         position_errors=position_errors,
-        estimated_lla=estimated_lla
+        estimated_lla=estimated_lla,
+        jamming_result=jamming_result
     )
 
     if print_progress:
