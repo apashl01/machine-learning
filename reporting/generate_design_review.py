@@ -209,12 +209,12 @@ def run_ekf_geolocation():
         ekf_results['jamming'] = {
             'mean_js_db': float(result.jamming_result.mean_js_db),
             'min_js_db': float(result.jamming_result.min_js_db),
-            'effective_pct': float(result.jamming_result.effective_jamming_pct)
+            'effective_pct': float(result.jamming_result.pct_effective)
         }
         print(f"\nJamming Analysis:")
         print(f"  Mean J/S: {result.jamming_result.mean_js_db:.1f} dB")
         print(f"  Min J/S: {result.jamming_result.min_js_db:.1f} dB")
-        print(f"  Effective Jamming: {result.jamming_result.effective_jamming_pct:.0f}% of trajectory")
+        print(f"  Effective Jamming: {result.jamming_result.pct_effective:.0f}% of trajectory")
 
     print(f"\nResults:")
     print(f"  Final position error: {final_error:.1f} m")

@@ -300,7 +300,7 @@ def generate_plots(result: SimulationResult):
         fig4.suptitle(f'Self-Protect Jamming Analysis\n'
                       f'Mean J/S: {jamming.mean_js_db:.1f} dB, '
                       f'Min J/S: {jamming.min_js_db:.1f} dB, '
-                      f'Effective: {jamming.effective_jamming_pct:.0f}% of time',
+                      f'Effective: {jamming.pct_effective:.0f}% of time',
                       fontsize=12, fontweight='bold')
         plt.tight_layout()
 
