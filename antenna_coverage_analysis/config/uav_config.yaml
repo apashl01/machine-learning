@@ -70,10 +70,10 @@ rx_antennas:
     type: "spiral"
 
   # Low-band RX (<2 GHz) - 1 antenna
-  # (Position TBD - placeholder)
+  # Right wing position
   - name: "Low-Band RX"
-    position: [0.0, 0.0, 0.2]   # Top of fuselage
-    orientation: [0, 0]         # Pointing up/forward
+    position: [-0.4, 1.0, 0.0]   # Right wing
+    orientation: [0, 0]         # Pointing forward
     freq_band: "<2 GHz"
     type: "dipole"
 
