@@ -200,6 +200,68 @@ def load_model2_specs() -> ADCSpecs:
     return load_adc_specs(model="model2")
 
 
+def load_from_system_config() -> ADCSpecs:
+    """
+    Load ADC specifications from shared system_config.yaml.
+
+    This ensures consistency with the central system design.
+    The system_config defines the actual ADC used in the system.
+
+    Returns:
+        ADCSpecs object with parameters from system_config
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config
+
+    sys_config = load_system_config()
+    adc = sys_config.adc
+
+    # Convert system_config bands to local format
+    freq_bands = []
+    sfdr_db = []
+    noise_density = []
+    full_scale_mvppd = []
+    im3_dbc = []
+
+    for band_name, band in adc.bands.items():
+        freq_bands.append([band.freq_min_ghz, band.freq_max_ghz])
+        sfdr_db.append(band.sfdr_db)
+        noise_density.append(band.noise_density_db)
+        # Convert full_scale_dbm to mVppd (approximate)
+        # P_dbm = 10*log10(V^2/R) + 30, for 50 ohm: V_rms = sqrt(10^((P-30)/10) * 50)
+        # V_ppd = V_rms * 2 * sqrt(2) * 1000 (for differential)
+        p_watts = 10 ** ((band.full_scale_dbm - 30) / 10)
+        v_rms = (p_watts * adc.input_impedance_ohm) ** 0.5
+        v_ppd_mv = v_rms * 2 * (2 ** 0.5) * 1000
+        full_scale_mvppd.append(v_ppd_mv)
+        im3_dbc.append(-70.0)  # Default IM3
+
+    return ADCSpecs(
+        name=adc.model,
+        description=f"ADC from system_config ({adc.model})",
+        sample_rate_gsps=adc.sample_rate_gsps,
+        noise_units=adc.noise_format,
+        freq_bands=freq_bands,
+        full_scale_mvppd=full_scale_mvppd,
+        input_impedance_ohm=adc.input_impedance_ohm,
+        sfdr_db=sfdr_db,
+        noise_density=noise_density,
+        noise_ref_level_dbfs=-10.0,
+        thd_percent=None,
+        thd_dbc=None,
+        thd_ref_level_dbfs=-1.0,
+        im3_dbc=im3_dbc,
+        im3_ref_level_dbfs=-7.0,
+        input_bandwidth_ghz=None,
+        return_loss_db=None,
+        mode=None,
+        decimation_factor=None,
+        notes=[f"Loaded from system_config.yaml - {adc.resolution_bits} bit ADC"]
+    )
+
+
 # =============================================================================
 # MODULE TEST
 # =============================================================================

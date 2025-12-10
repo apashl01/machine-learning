@@ -188,6 +188,75 @@ def load_uav_config(filepath: Union[str, Path] = None) -> UAVCoverageConfig:
     )
 
 
+def load_from_system_config(
+    local_config_path: Union[str, Path] = None
+) -> UAVCoverageConfig:
+    """
+    Load antenna coverage config with system_config integration.
+
+    Loads local uav_config.yaml for antenna positions and UAV geometry,
+    but uses system_config.yaml for ESM antenna parameters (gain, beamwidth).
+
+    Args:
+        local_config_path: Path to local uav_config.yaml. If None, uses default.
+
+    Returns:
+        UAVCoverageConfig with system_config ESM parameters applied
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config
+
+    # Load local config first (for antenna positions, UAV geometry)
+    local_config = load_uav_config(local_config_path)
+
+    # Load system config for ESM antenna parameters
+    sys_config = load_system_config()
+    esm_ant = sys_config.antennas
+
+    # Update spiral antenna with system_config values
+    spiral_spec = SpiralAntennaSpec(
+        beamwidth_deg=esm_ant.esm_beamwidth_deg,
+        gain_dbi=esm_ant.esm_peak_gain_dbi,
+        front_to_back_db=local_config.spiral_antenna.front_to_back_db
+    )
+
+    # Update RX antennas with system_config ESM parameters
+    rx_antennas = []
+    for ant in local_config.rx_antennas:
+        # Only apply ESM params to spiral-type antennas in Mid Band
+        if ant.antenna_type == 'spiral' and '2-18' in ant.freq_band:
+            rx_antennas.append(AntennaSpec(
+                name=ant.name,
+                position=ant.position,
+                orientation=ant.orientation,
+                freq_band=ant.freq_band,
+                antenna_type=ant.antenna_type,
+                beamwidth_deg=esm_ant.esm_beamwidth_deg,
+                gain_dbi=esm_ant.esm_peak_gain_dbi
+            ))
+        else:
+            rx_antennas.append(ant)
+
+    # Use system frequency reference
+    frequency_ghz = sys_config.freq_reference_ghz
+
+    return UAVCoverageConfig(
+        frequency_ghz=frequency_ghz,
+        spiral_antenna=spiral_spec,
+        horn_antenna=local_config.horn_antenna,
+        antennas=rx_antennas,  # Legacy field
+        rx_antennas=rx_antennas,
+        tx_antennas=local_config.tx_antennas,
+        uav_length=local_config.uav_length,
+        uav_width=local_config.uav_width,
+        azimuth_range=local_config.azimuth_range,
+        elevation_range=local_config.elevation_range,
+        angular_resolution=local_config.angular_resolution
+    )
+
+
 if __name__ == "__main__":
     config = load_uav_config()
     print(f"Frequency: {config.frequency_ghz} GHz")

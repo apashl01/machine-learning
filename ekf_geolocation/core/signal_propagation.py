@@ -38,7 +38,12 @@ class SignalData:
         print(f"  Noise floor: {self.noise_floor_dbw:.2f} dBW")
 
 
-def calculate_signal_propagation(config, trajectory) -> SignalData:
+def calculate_signal_propagation(
+    config,
+    trajectory,
+    bandwidth_hz: float = None,
+    noise_figure_db: float = None
+) -> SignalData:
     """
     Calculate received signal strength at each trajectory point.
 
@@ -50,11 +55,40 @@ def calculate_signal_propagation(config, trajectory) -> SignalData:
     Args:
         config: SimulationConfig object
         trajectory: TrajectoryData object
+        bandwidth_hz: Receiver bandwidth in Hz (from system_config).
+                      If None, attempts to load from system_config or uses 20 MHz default.
+        noise_figure_db: Receiver noise figure in dB (from system_config RF chain).
+                         If None, attempts to load from system_config or uses 4 dB default.
 
     Returns:
         SignalData object with propagation calculations
     """
     print("Calculating signal propagation...")
+
+    # Load system config defaults if parameters not provided
+    if bandwidth_hz is None or noise_figure_db is None:
+        try:
+            from pathlib import Path
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from system_config import load_system_config
+            sys_config = load_system_config()
+
+            if bandwidth_hz is None:
+                # Use channel bandwidth from system config (20 MHz typical)
+                bandwidth_hz = 20e6
+                print(f"  Using default channel bandwidth: {bandwidth_hz/1e6:.1f} MHz")
+
+            if noise_figure_db is None:
+                noise_figure_db = sys_config.rf_chain.cascade_noise_figure_db
+                print(f"  Using RF chain NF from system_config: {noise_figure_db:.1f} dB")
+
+        except (ImportError, FileNotFoundError) as e:
+            print(f"  Warning: Could not load system_config ({e}), using defaults")
+            if bandwidth_hz is None:
+                bandwidth_hz = 20e6  # 20 MHz - matches channel_bandwidth_mhz
+            if noise_figure_db is None:
+                noise_figure_db = 4.0  # Conservative default
 
     n_steps = config.n_steps
     eirp_dbw = config.emitter.eirp_dbw
@@ -81,9 +115,7 @@ def calculate_signal_propagation(config, trajectory) -> SignalData:
 
     # Calculate SNR
     # Thermal noise: N = k * T * B
-    T_kelvin = 290.0              # Room temperature
-    bandwidth_hz = 1e6            # Assume 1 MHz bandwidth
-    noise_figure_db = 3.0         # Typical receiver noise figure
+    T_kelvin = 290.0  # Room temperature
 
     # Thermal noise power (dBW)
     thermal_noise_dbw = 10 * np.log10(K_BOLTZMANN * T_kelvin * bandwidth_hz)

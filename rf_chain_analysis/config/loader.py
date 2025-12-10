@@ -355,6 +355,62 @@ def load_rf_chain_config(filepath: Union[str, Path] = None) -> ChainConfig:
     return load_chain_config(filepath)
 
 
+def load_from_system_config(chain_type: str = 'receive') -> ChainConfig:
+    """
+    Load RF chain configuration from shared system_config.yaml.
+
+    This ensures consistency with the central system design.
+    Creates a simplified ChainConfig from system_config RF chain parameters.
+
+    Args:
+        chain_type: 'receive' or 'transmit'
+
+    Returns:
+        ChainConfig object with parameters from system_config
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config
+
+    sys_config = load_system_config()
+    rf_chain = sys_config.rf_chain
+
+    # Build components from system_config
+    components = {}
+    for i, comp in enumerate(rf_chain.components):
+        comp_id = f"comp_{i}"
+        if 'lna' in comp.name.lower() or 'amplifier' in comp.name.lower():
+            components[comp_id] = AmplifierComponent(
+                id=comp_id,
+                name=comp.name,
+                order=i,
+                gain_db=comp.gain_db,
+                noise_figure_db=comp.noise_figure_db
+            )
+        else:
+            # Treat as amplifier with appropriate gain
+            components[comp_id] = AmplifierComponent(
+                id=comp_id,
+                name=comp.name,
+                order=i,
+                gain_db=comp.gain_db,
+                noise_figure_db=comp.noise_figure_db
+            )
+
+    return ChainConfig(
+        name=f"RF Chain from system_config ({chain_type})",
+        description=f"Cascade NF: {rf_chain.cascade_noise_figure_db} dB, "
+                    f"Total Gain: {rf_chain.total_gain_db} dB",
+        chain_type=ChainType.RECEIVE if chain_type == 'receive' else ChainType.TRANSMIT,
+        freq_range_ghz=[sys_config.freq_min_ghz, sys_config.freq_max_ghz],
+        components=components,
+        source_power_dbm=0.0,
+        input_power_range_dbm=[-100, 0],
+        damage_level_dbm=rf_chain.damage_threshold_dbm
+    )
+
+
 # =============================================================================
 # MODULE TEST
 # =============================================================================

@@ -212,12 +212,17 @@ def load_interferometer_from_system_config() -> InterferometerConfig:
     )
 
 
-def load_simulation_config(config_path: Optional[str] = None) -> SimulationConfig:
+def load_simulation_config(
+    config_path: Optional[str] = None,
+    use_system_config: bool = True
+) -> SimulationConfig:
     """
     Load simulation configuration from YAML file.
 
     Args:
         config_path: Path to YAML config file. If None, uses default.
+        use_system_config: If True, overwrite interferometer with system_config values.
+                          This ensures consistency with the central system design.
 
     Returns:
         SimulationConfig object
@@ -239,17 +244,16 @@ def load_simulation_config(config_path: Optional[str] = None) -> SimulationConfi
         frequency_hz=float(data['emitter']['frequency_hz'])
     )
 
-    # Parse interferometer config
-    interferometer = InterferometerConfig(
-        offset_body=np.array(data['interferometer']['offset_body']),
-        orientation=np.array(data['interferometer']['orientation']),
-        n_elements=data['interferometer']['n_elements'],
-        c_light_in_per_ns=data['interferometer']['c_light_in_per_ns'],
-        element_positions=np.array(data['interferometer']['element_positions']),
-        phase_error_high_snr_deg=data['interferometer']['phase_error_high_snr_deg'],
-        max_incident_angle_deg=data['interferometer']['max_incident_angle_deg'],
-        antenna_pattern_file=data['interferometer'].get('antenna_pattern_file')
-    )
+    # Load interferometer - prefer system_config for consistency
+    if use_system_config:
+        try:
+            interferometer = load_interferometer_from_system_config()
+            print("EKF: Loaded interferometer config from system_config.yaml")
+        except (ImportError, FileNotFoundError) as e:
+            print(f"EKF: Warning - Could not load system_config ({e}), using local config")
+            interferometer = _parse_local_interferometer(data)
+    else:
+        interferometer = _parse_local_interferometer(data)
 
     # Parse trajectory config
     trajectory = TrajectoryConfig(
@@ -288,4 +292,18 @@ def load_simulation_config(config_path: Optional[str] = None) -> SimulationConfi
         dt=sim['dt'],
         t_total=sim['t_total'],
         random_seed=sim['random_seed']
+    )
+
+
+def _parse_local_interferometer(data: dict) -> InterferometerConfig:
+    """Parse interferometer from local YAML data (fallback)."""
+    return InterferometerConfig(
+        offset_body=np.array(data['interferometer']['offset_body']),
+        orientation=np.array(data['interferometer']['orientation']),
+        n_elements=data['interferometer']['n_elements'],
+        c_light_in_per_ns=data['interferometer']['c_light_in_per_ns'],
+        element_positions=np.array(data['interferometer']['element_positions']),
+        phase_error_high_snr_deg=data['interferometer']['phase_error_high_snr_deg'],
+        max_incident_angle_deg=data['interferometer']['max_incident_angle_deg'],
+        antenna_pattern_file=data['interferometer'].get('antenna_pattern_file')
     )
