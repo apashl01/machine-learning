@@ -1,26 +1,95 @@
 """
 Detection Model Module
 
-Implements the binary (deterministic) detection model for ESM systems.
-Detection is based on hard SNR threshold - not probabilistic.
+Implements detection models for ESM systems.
+
+Phase 2 Update: Now uses probabilistic (Albersheim's) detection model
+as the default, with binary threshold as fallback option.
+
+Detection modes:
+- PROBABILISTIC (default): Uses Albersheim's approximation for Pd curve
+- BINARY: Hard SNR threshold (legacy mode for backwards compatibility)
 """
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from enum import Enum
+import numpy as np
 
 from ..config.loader import SystemConfig, Threat
 from .snr_calculator import SNRCalculator, BeamPosition
 
 
 # =============================================================================
-# DATA CLASSES
+# ENUMS AND CONSTANTS
 # =============================================================================
 
+class DetectionMode(Enum):
+    """Detection model mode."""
+    PROBABILISTIC = "probabilistic"  # Use Albersheim's approximation (recommended)
+    BINARY = "binary"                # Hard threshold (legacy)
+
+
 class DetectionStatus(Enum):
-    """Detection status based on binary threshold model."""
-    DETECTED = "detected"           # SNR >= threshold -> Pd ≈ 99.99%
-    NOT_DETECTED = "not_detected"   # SNR < threshold -> Pd = 0%
+    """Detection status."""
+    DETECTED = "detected"           # Pd above threshold (typically >50%)
+    MARGINAL = "marginal"           # Pd between 10% and 50%
+    NOT_DETECTED = "not_detected"   # Pd below 10%
+
+
+# =============================================================================
+# ALBERSHEIM'S APPROXIMATION (Probabilistic Detection)
+# =============================================================================
+
+def calculate_albersheim_pd(snr_db: float, pfa: float = 1e-6,
+                            n_pulses: int = 1) -> float:
+    """
+    Calculate probability of detection using Albersheim's approximation.
+
+    This is the unified detection probability calculation used across
+    the ESM analysis system.
+
+    Args:
+        snr_db: Signal-to-noise ratio in dB
+        pfa: Probability of false alarm (default 1e-6)
+        n_pulses: Number of pulses integrated
+
+    Returns:
+        Probability of detection (0-1)
+    """
+    try:
+        from scipy.special import erfc
+    except ImportError:
+        # Fallback if scipy not available
+        import math
+        def erfc(x):
+            # Approximation using error function
+            a1, a2, a3 = 0.254829592, 0.284496736, 1.421413741
+            a4, a5 = 1.453152027, 1.061405429
+            p = 0.3275911
+            sign = 1 if x >= 0 else -1
+            x = abs(x)
+            t = 1.0 / (1.0 + p * x)
+            y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * math.exp(-x*x)
+            return 1 - sign * y
+
+    snr_linear = 10 ** (snr_db / 10)
+
+    # Integration gain (non-coherent)
+    integration_gain = np.sqrt(n_pulses)
+    effective_snr = snr_linear * integration_gain
+
+    if effective_snr <= 0:
+        return 0.0
+
+    # Albersheim's approximation
+    # Pd = 0.5 * erfc(sqrt(-ln(Pfa)) - sqrt(SNR + 0.5)) / sqrt(2)
+    a = np.sqrt(-2 * np.log(pfa))
+    b = np.sqrt(2 * effective_snr)
+
+    pd = 0.5 * erfc((a - b) / np.sqrt(2))
+
+    return float(min(max(pd, 0.0), 1.0))
 
 
 @dataclass
@@ -113,26 +182,37 @@ class ThreatDetectionSummary:
 
 class DetectionModel:
     """
-    Binary (deterministic) detection model.
+    Unified ESM detection model supporting both probabilistic and binary modes.
 
-    This model implements a hard threshold approach:
-    - SNR >= threshold: Detection guaranteed (Pd ≈ 99.99%)
-    - SNR < threshold: No detection (Pd = 0%)
+    Phase 2 Update: Now uses Albersheim's approximation by default for
+    accurate probability of detection (Pd) calculations.
 
-    This differs from probabilistic models that use gradual Pd curves.
-    The binary approach is appropriate for digital receivers with
-    well-defined detection thresholds.
+    Detection Modes:
+    - PROBABILISTIC (default): Uses Albersheim's approximation for gradual Pd curve
+    - BINARY (legacy): Hard threshold approach
+
+    Detection Status Thresholds (for probabilistic mode):
+    - DETECTED: Pd >= 50%
+    - MARGINAL: 10% <= Pd < 50%
+    - NOT_DETECTED: Pd < 10%
     """
 
-    # Detection probabilities for binary model
-    PD_ABOVE_THRESHOLD = 0.9999  # Essentially guaranteed
-    PD_BELOW_THRESHOLD = 0.0     # Cannot detect
+    # Detection status thresholds (for probabilistic mode)
+    PD_DETECTED_THRESHOLD = 0.50    # Pd >= 50% -> DETECTED
+    PD_MARGINAL_THRESHOLD = 0.10    # Pd >= 10% -> MARGINAL
+
+    # Legacy binary model probabilities
+    PD_ABOVE_THRESHOLD = 0.9999  # For binary mode
+    PD_BELOW_THRESHOLD = 0.0     # For binary mode
 
     def __init__(
         self,
         system_config: SystemConfig,
         snr_calculator: SNRCalculator = None,
-        verbose: bool = None
+        verbose: bool = None,
+        mode: DetectionMode = DetectionMode.PROBABILISTIC,
+        pfa: float = None,
+        n_pulses: int = 1
     ):
         """
         Initialize detection model.
@@ -141,9 +221,15 @@ class DetectionModel:
             system_config: System configuration.
             snr_calculator: SNR calculator. If None, creates one.
             verbose: Enable verbose output.
+            mode: Detection mode (PROBABILISTIC or BINARY).
+            pfa: Probability of false alarm. If None, uses 1e-6 default.
+            n_pulses: Number of pulses integrated (for pulse integration gain).
         """
         self.config = system_config
         self.verbose = verbose if verbose is not None else system_config.analysis.verbose
+        self.mode = mode
+        self.pfa = pfa if pfa is not None else 1e-6
+        self.n_pulses = n_pulses
 
         if snr_calculator is None:
             snr_calculator = SNRCalculator(system_config, verbose=False)
@@ -163,6 +249,8 @@ class DetectionModel:
         """
         Evaluate detection for a single scenario.
 
+        Uses probabilistic (Albersheim's) or binary model depending on mode.
+
         Args:
             threat: Threat parameters.
             range_m: Detection range.
@@ -170,7 +258,7 @@ class DetectionModel:
             threshold_db: SNR threshold. If None, uses config.
 
         Returns:
-            DetectionResult with binary detection verdict.
+            DetectionResult with detection verdict and probability.
         """
         if threshold_db is None:
             threshold_db = self.config.receiver.snr_threshold_db
@@ -180,23 +268,54 @@ class DetectionModel:
             threat, range_m, beam_position, threshold_db
         )
 
-        # Binary decision
-        if snr_result.snr_db >= threshold_db:
-            status = DetectionStatus.DETECTED
-            pd = self.PD_ABOVE_THRESHOLD
-            explanation = (
-                f"SNR ({snr_result.snr_db:.1f} dB) exceeds threshold "
-                f"({threshold_db:.1f} dB) by {snr_result.margin_db:.1f} dB. "
-                f"Detection essentially guaranteed."
+        # Evaluate detection based on mode
+        if self.mode == DetectionMode.PROBABILISTIC:
+            # Use Albersheim's approximation for probabilistic Pd
+            pd = calculate_albersheim_pd(
+                snr_db=snr_result.snr_db,
+                pfa=self.pfa,
+                n_pulses=self.n_pulses
             )
+
+            # Determine status based on Pd thresholds
+            if pd >= self.PD_DETECTED_THRESHOLD:
+                status = DetectionStatus.DETECTED
+                explanation = (
+                    f"Pd = {pd*100:.1f}% (>= {self.PD_DETECTED_THRESHOLD*100:.0f}% threshold). "
+                    f"SNR: {snr_result.snr_db:.1f} dB, Pfa: {self.pfa:.0e}, "
+                    f"N_pulses: {self.n_pulses}. Detection likely."
+                )
+            elif pd >= self.PD_MARGINAL_THRESHOLD:
+                status = DetectionStatus.MARGINAL
+                explanation = (
+                    f"Pd = {pd*100:.1f}% (marginal: {self.PD_MARGINAL_THRESHOLD*100:.0f}%-"
+                    f"{self.PD_DETECTED_THRESHOLD*100:.0f}%). "
+                    f"SNR: {snr_result.snr_db:.1f} dB. Detection possible but unreliable."
+                )
+            else:
+                status = DetectionStatus.NOT_DETECTED
+                explanation = (
+                    f"Pd = {pd*100:.1f}% (< {self.PD_MARGINAL_THRESHOLD*100:.0f}% threshold). "
+                    f"SNR: {snr_result.snr_db:.1f} dB. Detection unlikely."
+                )
         else:
-            status = DetectionStatus.NOT_DETECTED
-            pd = self.PD_BELOW_THRESHOLD
-            explanation = (
-                f"SNR ({snr_result.snr_db:.1f} dB) below threshold "
-                f"({threshold_db:.1f} dB) by {abs(snr_result.margin_db):.1f} dB. "
-                f"Detection not possible - signal below noise floor."
-            )
+            # Binary mode (legacy)
+            if snr_result.snr_db >= threshold_db:
+                status = DetectionStatus.DETECTED
+                pd = self.PD_ABOVE_THRESHOLD
+                explanation = (
+                    f"SNR ({snr_result.snr_db:.1f} dB) exceeds threshold "
+                    f"({threshold_db:.1f} dB) by {snr_result.margin_db:.1f} dB. "
+                    f"Detection essentially guaranteed. [Binary mode]"
+                )
+            else:
+                status = DetectionStatus.NOT_DETECTED
+                pd = self.PD_BELOW_THRESHOLD
+                explanation = (
+                    f"SNR ({snr_result.snr_db:.1f} dB) below threshold "
+                    f"({threshold_db:.1f} dB) by {abs(snr_result.margin_db):.1f} dB. "
+                    f"Detection not possible. [Binary mode]"
+                )
 
         result = DetectionResult(
             threat_id=threat.id,

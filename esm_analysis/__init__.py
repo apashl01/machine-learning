@@ -18,7 +18,14 @@ __version__ = "1.0.0"
 __author__ = "Andrew's Analysis Tools"
 
 from .config import load_config, SystemConfig, ThreatLibrary
-from .core import SNRCalculator, ThreatCategorizer, DetectionModel
+from .core import (
+    SNRCalculator,
+    ThreatCategorizer,
+    DetectionModel,
+    DetectionMode,
+    DetectionStatus,
+    calculate_albersheim_pd,
+)
 from .scheduling import DwellScheduler
 from .visualization import ESMPlotter
 from .measurement_accuracy import (
@@ -42,6 +49,9 @@ __all__ = [
     'SNRCalculator',
     'ThreatCategorizer',
     'DetectionModel',
+    'DetectionMode',
+    'DetectionStatus',
+    'calculate_albersheim_pd',
     'DwellScheduler',
     'ESMPlotter',
     'MeasurementConfig',

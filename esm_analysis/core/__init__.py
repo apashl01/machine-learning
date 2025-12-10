@@ -6,7 +6,13 @@ Provides SNR calculation, threat categorization, and detection modeling.
 
 from .snr_calculator import SNRCalculator, SNRResult
 from .threat_categorizer import ThreatCategorizer, ThreatCategory, CategorizedThreat
-from .detection_model import DetectionModel, DetectionResult
+from .detection_model import (
+    DetectionModel,
+    DetectionResult,
+    DetectionMode,
+    DetectionStatus,
+    calculate_albersheim_pd,
+)
 
 __all__ = [
     'SNRCalculator',
@@ -16,4 +22,7 @@ __all__ = [
     'CategorizedThreat',
     'DetectionModel',
     'DetectionResult',
+    'DetectionMode',
+    'DetectionStatus',
+    'calculate_albersheim_pd',
 ]
