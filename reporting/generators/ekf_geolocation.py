@@ -152,3 +152,26 @@ def add_ekf_geolocation_slides(gen: DesignReviewGenerator,
                 image_path=str(interf_plot),
                 image_width=11.0
             )
+
+        # Jamming analysis (Phase 2 Enhancement)
+        jamming_plot = output_path / "ekf_jamming_analysis.png"
+        if jamming_plot.exists():
+            gen.add_content_slide(
+                "Self-Protect Jamming Analysis",
+                image_path=str(jamming_plot),
+                image_width=11.0
+            )
+
+    # Jamming metrics (Phase 2 Enhancement)
+    if results and 'jamming' in results:
+        jam = results['jamming']
+        jam_metrics = {}
+        if 'mean_js_db' in jam:
+            jam_metrics['Mean J/S Ratio'] = f"{jam['mean_js_db']:.1f} dB"
+        if 'min_js_db' in jam:
+            jam_metrics['Minimum J/S'] = f"{jam['min_js_db']:.1f} dB"
+        if 'effective_pct' in jam:
+            jam_metrics['Effective Jamming'] = f"{jam['effective_pct']:.0f}% of trajectory"
+
+        if jam_metrics:
+            gen.add_metrics_slide("Trajectory Jamming Performance", jam_metrics)

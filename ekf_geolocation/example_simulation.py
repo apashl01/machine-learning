@@ -245,6 +245,65 @@ def generate_plots(result: SimulationResult):
                   fontsize=14, fontweight='bold')
     plt.tight_layout()
 
+    # Figure 4: Jamming Analysis (Phase 2 Enhancement)
+    # Shows J/S ratio over trajectory if jamming analysis was performed
+    fig4 = None
+    if result.jamming_result is not None:
+        fig4, axes4 = plt.subplots(2, 2, figsize=(12, 8))
+        jamming = result.jamming_result
+
+        # J/S Ratio vs Time
+        ax = axes4[0, 0]
+        ax.plot(config.time, jamming.js_ratio_db, 'b-', linewidth=2, label='J/S Ratio')
+        ax.axhline(0, color='r', linestyle='--', linewidth=2, label='Burn-through (0 dB)')
+        ax.axhline(10, color='g', linestyle='--', linewidth=1.5, alpha=0.7, label='Effective Jamming (+10 dB)')
+        ax.fill_between(config.time, jamming.js_ratio_db, 0,
+                        where=jamming.js_ratio_db > 0, alpha=0.3, color='green', label='Jamming Effective')
+        ax.fill_between(config.time, jamming.js_ratio_db, 0,
+                        where=jamming.js_ratio_db <= 0, alpha=0.3, color='red', label='Burn-through')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('J/S Ratio (dB)')
+        ax.set_title('Jamming-to-Signal Ratio vs Time')
+        ax.legend(loc='best', fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+        # Off-boresight angle vs Time
+        ax = axes4[0, 1]
+        ax.plot(config.time, jamming.off_boresight_deg, 'purple', linewidth=2)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Off-Boresight Angle (deg)')
+        ax.set_title('Jammer Antenna Off-Boresight Angle')
+        ax.grid(True, alpha=0.3)
+
+        # Jammer and Signal Power vs Time
+        ax = axes4[1, 0]
+        ax.plot(config.time, jamming.jammer_power_dbw, 'r-', linewidth=2, label='Jammer Power at Target')
+        ax.plot(config.time, jamming.signal_power_dbw, 'b-', linewidth=2, label='Radar Signal at Target')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Power (dBW)')
+        ax.set_title('Power Levels at Target')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # J/S vs Distance
+        ax = axes4[1, 1]
+        distances = trajectory.distances_from_emitter
+        sc = ax.scatter(distances, jamming.js_ratio_db, c=config.time, s=20, cmap='viridis')
+        plt.colorbar(sc, ax=ax, label='Time (s)')
+        ax.axhline(0, color='r', linestyle='--', linewidth=2, label='Burn-through')
+        ax.set_xlabel('Range to Emitter (km)')
+        ax.set_ylabel('J/S Ratio (dB)')
+        ax.set_title('J/S Ratio vs Range')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        fig4.suptitle(f'Self-Protect Jamming Analysis\n'
+                      f'Mean J/S: {jamming.mean_js_db:.1f} dB, '
+                      f'Min J/S: {jamming.min_js_db:.1f} dB, '
+                      f'Effective: {jamming.effective_jamming_pct:.0f}% of time',
+                      fontsize=12, fontweight='bold')
+        plt.tight_layout()
+
     # Save plots
     output_dir = Path(__file__).parent / "output"
     output_dir.mkdir(exist_ok=True)
@@ -252,6 +311,10 @@ def generate_plots(result: SimulationResult):
     fig1.savefig(output_dir / "ekf_trajectory_error.png", dpi=150, bbox_inches='tight')
     fig2.savefig(output_dir / "ekf_component_errors.png", dpi=150, bbox_inches='tight')
     fig3.savefig(output_dir / "ekf_interferometer_performance.png", dpi=150, bbox_inches='tight')
+
+    if fig4 is not None:
+        fig4.savefig(output_dir / "ekf_jamming_analysis.png", dpi=150, bbox_inches='tight')
+        print("  Jamming analysis plot saved")
 
     print(f"\nPlots saved to: {output_dir}")
 
