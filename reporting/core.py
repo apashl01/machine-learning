@@ -454,7 +454,12 @@ class DesignReviewGenerator:
 
     def _add_bullets(self, slide, bullets: List[str],
                      left, top, width, height):
-        """Add bullet points to a slide."""
+        """Add bullet points to a slide with proper formatting.
+
+        Task 7.1 Fix: Uses PowerPoint's native bullet formatting instead of
+        manually prepending bullet characters. Supports sub-bullets via tab
+        or leading spaces.
+        """
         text_box = slide.shapes.add_textbox(left, top, width, height)
         tf = text_box.text_frame
         tf.word_wrap = True
@@ -464,14 +469,27 @@ class DesignReviewGenerator:
                 p = tf.paragraphs[0]
             else:
                 p = tf.add_paragraph()
-            p.text = f"• {bullet}"
-            p.font.size = Pt(18)
+
+            # Detect sub-bullets (leading tab or 3+ spaces)
+            if bullet.startswith('\t') or bullet.startswith('   '):
+                p.level = 1
+                p.text = bullet.strip()
+            else:
+                p.level = 0
+                p.text = bullet
+
+            p.font.size = Pt(18 if p.level == 0 else 16)
             p.font.color.rgb = COLORS['text']
-            p.space_after = Pt(12)
+            p.space_after = Pt(12 if p.level == 0 else 8)
 
     def _add_image(self, slide, image_path: str,
                    left, top, width=None, height=None):
-        """Add an image to a slide."""
+        """Add an image to a slide with auto-scaling.
+
+        Task 7.2 Fix: Implements scale-to-fit logic to prevent plots from
+        exceeding slide boundaries. Images are scaled proportionally to fit
+        within max_width and max_height bounds.
+        """
         path = Path(image_path)
         if not path.exists():
             # Add placeholder text if image not found
@@ -483,12 +501,37 @@ class DesignReviewGenerator:
             p.font.italic = True
             return
 
+        # Define max bounds for scaling (Task 7.2)
+        max_width = Inches(10)
+        max_height = Inches(5.5)
+
         if width:
-            slide.shapes.add_picture(str(path), left, top, width=width)
+            # Add with specified width
+            pic = slide.shapes.add_picture(str(path), left, top, width=width)
+
+            # Check if height exceeds max and rescale proportionally
+            if pic.height > max_height:
+                scale = max_height / pic.height
+                pic.width = int(pic.width * scale)
+                pic.height = max_height
         elif height:
-            slide.shapes.add_picture(str(path), left, top, height=height)
+            pic = slide.shapes.add_picture(str(path), left, top, height=height)
+
+            # Check if width exceeds max and rescale proportionally
+            if pic.width > max_width:
+                scale = max_width / pic.width
+                pic.height = int(pic.height * scale)
+                pic.width = max_width
         else:
-            slide.shapes.add_picture(str(path), left, top)
+            pic = slide.shapes.add_picture(str(path), left, top)
+
+            # Scale to fit within bounds
+            if pic.width > max_width or pic.height > max_height:
+                width_scale = max_width / pic.width if pic.width > max_width else 1.0
+                height_scale = max_height / pic.height if pic.height > max_height else 1.0
+                scale = min(width_scale, height_scale)
+                pic.width = int(pic.width * scale)
+                pic.height = int(pic.height * scale)
 
     def save(self, output_path: str):
         """Save the presentation to a file."""

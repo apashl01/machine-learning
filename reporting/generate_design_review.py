@@ -35,6 +35,7 @@ from reporting.generators import (
     add_summary_slide,
     add_compliance_slides
 )
+from reporting.generators.jamming import add_jamming_slides
 
 
 def print_header(text: str):
@@ -97,20 +98,30 @@ def run_direction_finding_analysis():
         'baselines': config.baselines
     }
 
-    # Get accuracy at boresight for reference frequency
+    # Task 9.1: Get WORST-CASE accuracy at low freq / max angle corner
+    # (instead of optimistic boresight/mid-freq)
+    low_freq_idx = 0  # Lowest frequency (worst case for baseline resolution)
+    max_angle_idx = -1  # Maximum incident angle (worst case for SNR and geometry)
+
+    # Get worst-case accuracy for compliance checking
+    worst_case_accuracy = results.accuracy.angle_error_realistic[low_freq_idx, max_angle_idx]
+
+    # Also get boresight/mid-freq for reference comparison
     mid_freq_idx = len(results.accuracy.frequencies_ghz) // 2
     boresight_idx = len(results.accuracy.incident_angles) // 2
-    angle_accuracy = results.accuracy.angle_error_realistic[mid_freq_idx, boresight_idx]
+    boresight_accuracy = results.accuracy.angle_error_realistic[mid_freq_idx, boresight_idx]
 
     df_results = {
-        'angle_accuracy_deg': float(angle_accuracy),
+        'angle_accuracy_deg': float(worst_case_accuracy),  # Worst-case for compliance
+        'angle_accuracy_boresight_deg': float(boresight_accuracy),  # Reference
         'ambiguity_free_fov': 80,  # From design
         'min_snr_db': 10,
         'max_incident_angle': 70
     }
 
     print(f"\nResults:")
-    print(f"  Angle accuracy at boresight: {angle_accuracy:.2f} deg")
+    print(f"  Angle accuracy (boresight): {boresight_accuracy:.2f} deg")
+    print(f"  Angle accuracy (worst-case): {worst_case_accuracy:.2f} deg")
     print(f"  Baselines: {config.baselines}")
 
     return df_config, df_results
@@ -278,15 +289,29 @@ def run_esm_analysis():
         'scan_type': 'Frequency Scanning'
     }
 
-    # Calculate max detection range for a typical threat
-    max_range = 100  # km default
+    # Task 9.2: Calculate MINIMUM detection range among mandatory threats
+    # (instead of optimistic max range)
+    min_range = float('inf')
+    max_range = 0  # Keep max for reference
+    detection_ranges = []
     if threats:
-        for ct in categorization.sidelobe_detectable + categorization.main_beam_required:
+        detectable = categorization.sidelobe_detectable + categorization.main_beam_required
+        for ct in detectable:
             if hasattr(ct, 'max_range_m') and ct.max_range_m:
-                max_range = max(max_range, ct.max_range_m / 1000)
+                range_km = ct.max_range_m / 1000
+                detection_ranges.append(range_km)
+                min_range = min(min_range, range_km)
+                max_range = max(max_range, range_km)
+
+    # Use reasonable defaults if no threats analyzed
+    if min_range == float('inf'):
+        min_range = 100
+    if max_range == 0:
+        max_range = 100
 
     esm_results = {
-        'detection_range_km': max_range,
+        'detection_range_km': min_range,  # Use minimum for worst-case compliance
+        'max_detection_range_km': max_range,  # Keep max for reference
         'poi': 0.95,
         'sensitivity_dbm': sensitivity,
         'max_frequency_ghz': receiver.freq_max_hz/1e9,
@@ -806,6 +831,9 @@ def generate_powerpoint(
     add_ekf_geolocation_slides(gen, config=ekf_config, results=ekf_results,
                                 output_dir=str(base_dir / "ekf_geolocation/output"))
 
+    # Add jamming analysis slides (Task 4.1 - Phase 2 Enhancement)
+    add_jamming_slides(gen, output_dir=str(base_dir / "results"))
+
     # Run compliance check
     from system_config import (
         calculate_multiband_noise_floor,
@@ -836,17 +864,10 @@ def generate_powerpoint(
     # Add compliance slides
     add_compliance_slides(gen, compliance_result, compliance_rows)
 
-    # Summary
+    # Summary - Task 10: Use compliance dashboard instead of hardcoded findings
     add_summary_slide(
         gen,
-        key_findings=[
-            f"System covers {sys_config.freq_min_ghz}-{sys_config.freq_max_ghz} GHz with {sys_config.adc.sample_rate_gsps} GSPS ADC",
-            f"System noise floor: {noise_result.system_noise_floor_dbm:.1f} dBm, sensitivity: {noise_result.sensitivity_dbm:.1f} dBm",
-            f"RF chain: {rf_results['total_gain_db']} dB gain, {rf_results['cascade_nf_db']} dB cascade NF",
-            f"Interferometer: {df_config['n_elements']} elements with {df_config['max_baseline']:.1f}\" max baseline",
-            f"Direction finding accuracy: {df_results['angle_accuracy_deg']:.2f} deg at boresight",
-            f"EKF geolocation: {ekf_results['final_error_m']:.0f}m final error"
-        ],
+        compliance_result=compliance_result,
         recommendations=[
             "Verify ADC performance at band edges (12-18 GHz)",
             "Consider additional antenna for nadir coverage",

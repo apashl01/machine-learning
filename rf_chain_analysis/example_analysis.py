@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import matplotlib.pyplot as plt
 
 from rf_chain_analysis import (
-    load_chain_config,
+    load_from_system_config,  # Task 1.3: Use central system_config
     analyze_rf_chain,
     print_results_summary,
     print_gain_breakdown_table
@@ -28,8 +28,8 @@ from rf_chain_analysis import (
 def main():
     """Run RF chain analysis example matching MATLAB."""
 
-    # Load chain configuration
-    chain = load_chain_config()
+    # Task 1.3: Load chain configuration from central system_config
+    chain = load_from_system_config(chain_type='receive')
 
     print("=== RF Chain Configuration ===")
     print(f"Chain Type: {chain.chain_type.value}")

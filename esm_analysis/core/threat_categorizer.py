@@ -12,6 +12,7 @@ from enum import Enum
 
 from ..config.loader import SystemConfig, Threat, ThreatLibrary
 from .snr_calculator import SNRCalculator, MultiBeamSNRResult, BeamPosition
+from .detection_model import calculate_albersheim_pd
 
 
 # =============================================================================
@@ -284,39 +285,53 @@ class ThreatCategorizer:
         snr_threshold_db: float
     ) -> tuple:
         """
-        Determine threat category based on SNR results.
+        Determine threat category based on probability of detection (Pd).
+
+        Task 5 Update: Uses Pd-based detection (Pd >= 50% = detectable) instead
+        of simple SNR threshold comparison. This provides a probabilistic
+        assessment using Albersheim's approximation.
 
         Returns:
             Tuple of (ThreatCategory, explanation_string)
         """
-        main_beam_ok = snr_results.main_beam_detected
-        sidelobe_ok = snr_results.sidelobe_detected
-        back_lobe_ok = snr_results.back_lobe_detected
+        # Calculate Pd for each beam position using Albersheim's approximation
+        # Use Pfa from config (default 1e-6) and n_pulses=1 for single-pulse detection
+        pfa = getattr(self.config.receiver, 'pfa', 1e-6) if hasattr(self.config, 'receiver') else 1e-6
+
+        main_beam_pd = calculate_albersheim_pd(snr_results.main_beam_snr.snr_db, pfa=pfa)
+        sidelobe_pd = calculate_albersheim_pd(snr_results.sidelobe_snr.snr_db, pfa=pfa)
+        back_lobe_pd = calculate_albersheim_pd(snr_results.back_lobe_snr.snr_db, pfa=pfa)
+
+        # Detection threshold: Pd >= 50%
+        PD_THRESHOLD = 0.50
+
+        main_beam_ok = main_beam_pd >= PD_THRESHOLD
+        sidelobe_ok = sidelobe_pd >= PD_THRESHOLD
+        back_lobe_ok = back_lobe_pd >= PD_THRESHOLD
 
         # Priority: sidelobe detection is best (lowest duty cycle)
         if sidelobe_ok:
             return (
                 ThreatCategory.SIDELOBE_DETECTABLE,
-                f"Sidelobe SNR ({snr_results.sidelobe_snr.snr_db:.1f} dB) exceeds "
-                f"threshold ({snr_threshold_db:.1f} dB). Threat radiates "
-                f"continuously via sidelobes - low duty cycle monitoring sufficient."
+                f"Sidelobe Pd ({sidelobe_pd*100:.1f}%) >= 50%. "
+                f"SNR: {snr_results.sidelobe_snr.snr_db:.1f} dB. "
+                f"Threat radiates continuously via sidelobes - low duty cycle monitoring sufficient."
             )
 
         # If only main beam works
         if main_beam_ok:
             return (
                 ThreatCategory.MAIN_BEAM_REQUIRED,
-                f"Sidelobe SNR ({snr_results.sidelobe_snr.snr_db:.1f} dB) below "
-                f"threshold. Main beam SNR ({snr_results.main_beam_snr.snr_db:.1f} dB) "
-                f"sufficient. Must schedule receiver to catch main beam during scan."
+                f"Sidelobe Pd ({sidelobe_pd*100:.1f}%) < 50%. "
+                f"Main beam Pd ({main_beam_pd*100:.1f}%) >= 50%. "
+                f"Must schedule receiver to catch main beam during scan."
             )
 
         # Cannot detect at all
         return (
             ThreatCategory.UNDETECTABLE,
-            f"All beam positions below threshold at {detection_range_m/1000:.1f} km. "
-            f"Main beam SNR: {snr_results.main_beam_snr.snr_db:.1f} dB, "
-            f"Sidelobe: {snr_results.sidelobe_snr.snr_db:.1f} dB. "
+            f"All beam positions have Pd < 50% at {detection_range_m/1000:.1f} km. "
+            f"Main beam Pd: {main_beam_pd*100:.1f}%, Sidelobe Pd: {sidelobe_pd*100:.1f}%. "
             f"Need closer range or different approach."
         )
 
