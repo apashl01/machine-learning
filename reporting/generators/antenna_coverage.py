@@ -151,3 +151,49 @@ def add_antenna_coverage_slides(gen: DesignReviewGenerator,
                 image_path=str(gaps_plot),
                 image_width=10.0
             )
+
+        # Task 2: Multi-band coverage plots
+        # Coverage comparison (overview of all bands)
+        comparison_plot = output_path / "coverage_comparison.png"
+        if comparison_plot.exists():
+            gen.add_content_slide(
+                "Multi-Band Coverage Comparison",
+                image_path=str(comparison_plot),
+                image_width=10.0
+            )
+
+        # RX Mid-Band coverage
+        rx_mid_plot = output_path / "coverage_rx_mid.png"
+        if rx_mid_plot.exists():
+            gen.add_content_slide(
+                "RX Coverage - Mid Band (2-18 GHz)",
+                image_path=str(rx_mid_plot),
+                image_width=10.0
+            )
+
+        # RX Low-Band coverage
+        rx_low_plot = output_path / "coverage_rx_low.png"
+        if rx_low_plot.exists():
+            gen.add_content_slide(
+                "RX Coverage - Low Band (<2 GHz)",
+                image_path=str(rx_low_plot),
+                image_width=10.0
+            )
+
+        # TX Mid-Band coverage
+        tx_mid_plot = output_path / "coverage_tx_mid.png"
+        if tx_mid_plot.exists():
+            gen.add_content_slide(
+                "TX Coverage - Mid Band (2-18 GHz)",
+                image_path=str(tx_mid_plot),
+                image_width=10.0
+            )
+
+        # TX Low-Band coverage
+        tx_low_plot = output_path / "coverage_tx_low.png"
+        if tx_low_plot.exists():
+            gen.add_content_slide(
+                "TX Coverage - Low Band (<2 GHz)",
+                image_path=str(tx_low_plot),
+                image_width=10.0
+            )

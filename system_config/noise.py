@@ -185,8 +185,16 @@ def calculate_system_noise_floor(
     # 5. Calculate sensitivity (MDS)
     sensitivity_dbm = system_noise_floor_dbm + snr_required_db
 
-    # 6. Calculate dynamic range
-    dynamic_range_db = config.rf_chain.damage_threshold_dbm - system_noise_floor_dbm
+    # 6. Calculate dynamic range (Task 3.1: Use ADC Full Scale instead of Damage Threshold)
+    # Get ADC band for this frequency
+    band = config.adc.get_band_for_frequency(frequency_ghz)
+    if band is None:
+        # Use worst-case from last band
+        adc_full_scale_dbm = -2
+    else:
+        adc_full_scale_dbm = band.full_scale_dbm
+
+    dynamic_range_db = adc_full_scale_dbm - system_noise_floor_dbm
 
     return NoiseFloorResult(
         thermal_noise_dbm=thermal_noise_dbm,
@@ -306,9 +314,17 @@ def calculate_multiband_noise_floor(
         total_noise_linear = rf_noise_linear + adc_noise_linear
         system_noise_floor_dbm = 10 * np.log10(total_noise_linear)
 
-        # Sensitivity and dynamic range
+        # Sensitivity and dynamic range (Task 3.1: Use ADC Full Scale)
         sensitivity_dbm = system_noise_floor_dbm + snr_required_db
-        dynamic_range_db = damage_thresh_dbm - system_noise_floor_dbm
+
+        # Get ADC full scale for this frequency band
+        band = config.adc.get_band_for_frequency(center_freq_ghz)
+        if band is None:
+            adc_full_scale_dbm = -2  # Worst-case default
+        else:
+            adc_full_scale_dbm = band.full_scale_dbm
+
+        dynamic_range_db = adc_full_scale_dbm - system_noise_floor_dbm
 
         # Determine band name
         if freq_range[1] <= 2.0:

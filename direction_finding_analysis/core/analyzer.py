@@ -110,12 +110,15 @@ class InterferometerAnalyzer:
         try:
             from system_config import load_system_config
             sys_config = load_system_config()
+            # Access ESM antenna parameters from system_config
             self.peak_gain_dbi = sys_config.antennas.esm_peak_gain_dbi
             self.beamwidth_deg = sys_config.antennas.esm_beamwidth_deg
-        except Exception:
+            print(f"Using antenna pattern from system_config: {self.peak_gain_dbi} dBi, {self.beamwidth_deg}° beamwidth")
+        except Exception as e:
             # Default to typical spiral antenna parameters
-            self.peak_gain_dbi = 5.0   # Typical spiral antenna gain
-            self.beamwidth_deg = 90.0  # Wide beamwidth
+            print(f"Warning: Could not load antenna parameters from system_config ({e}). Using defaults.")
+            self.peak_gain_dbi = 3.0   # Typical spiral antenna gain
+            self.beamwidth_deg = 70.0  # Realistic beamwidth
 
         # Create Gaussian pattern function
         # G(theta) = G_peak - 12 * (theta / (beamwidth/2))^2

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 import yaml
+import numpy as np
+from scipy import special
 
 
 # =============================================================================
@@ -48,6 +50,42 @@ class ReceiverConfig:
     def instantaneous_bandwidth_mhz(self) -> float:
         """Instantaneous bandwidth in MHz."""
         return self.instantaneous_bandwidth_ghz * 1000
+
+    def compute_pfa_for_threshold(self, threshold_db: Optional[float] = None) -> float:
+        """
+        Compute Pfa dynamically from SNR threshold (Task 6).
+
+        Uses the complementary error function (erfc) to derive Pfa from
+        the detection threshold. This ensures Pfa is consistent with the
+        configured SNR threshold.
+
+        Args:
+            threshold_db: Detection threshold in dB (default: use snr_threshold_db)
+
+        Returns:
+            Probability of false alarm per sample
+        """
+        if threshold_db is None:
+            threshold_db = self.snr_threshold_db
+
+        # Convert threshold from dB to sigma units
+        # threshold_sigma = sqrt(10^(threshold_db/10))
+        threshold_sigma = 10 ** (threshold_db / 20)
+
+        # Pfa = erfc(threshold_sigma / sqrt(2)) / 2
+        pfa = float(special.erfc(threshold_sigma / np.sqrt(2)) / 2)
+
+        return pfa
+
+    @property
+    def dynamic_pfa(self) -> float:
+        """
+        Get dynamically computed Pfa based on current SNR threshold (Task 6).
+
+        Returns:
+            Probability of false alarm
+        """
+        return self.compute_pfa_for_threshold()
 
 
 @dataclass
