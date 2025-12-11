@@ -96,11 +96,23 @@ scanning:
   instantaneous_bandwidth_ghz: 1.0
 
 # =============================================================================
-# RF CHAIN REQUIREMENTS
+# RF CHAIN REQUIREMENTS (Task 9.3: Path-Specific)
 # =============================================================================
 rf_chain:
-  # Maximum acceptable noise figure
-  max_noise_figure_db: 5.0
+  # RX Low Band (<2 GHz) - More relaxed due to larger wavelength
+  rx_low_band:
+    max_noise_figure_db: 6.0
+    min_gain_db: 15.0
+    paths: ["rx_low_band"]  # Matches path IDs in system_config.yaml
 
-  # Minimum gain
-  min_gain_db: 20.0
+  # RX Mid Band (2-18 GHz) - Tighter requirements for primary ESM band
+  rx_mid_band:
+    max_noise_figure_db: 4.0
+    min_gain_db: 25.0
+    paths: ["rx_2_18ghz"]  # Matches path IDs in system_config.yaml
+
+  # TX Paths - Different requirements focused on output power
+  tx_paths:
+    min_output_power_dbm: 30.0  # Minimum TX output power
+    max_gain_db: 60.0           # Maximum to avoid component damage
+    paths: ["tx_2_18ghz", "tx_low_band"]  # Matches TX path IDs

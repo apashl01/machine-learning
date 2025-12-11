@@ -248,11 +248,94 @@ def check_compliance(
                 passed=passed
             ))
 
-    # RF chain requirements
+    # RF chain requirements (Task 9.3: Path-Specific)
     if 'rf_chain' in requirements:
         rf_req = requirements['rf_chain']
 
-        if 'max_noise_figure_db' in rf_req and 'noise_figure_db' in performance:
+        # Check if we have path-specific performance data
+        if 'all_paths' in performance:
+            all_paths = performance['all_paths']
+
+            # Iterate through each path category in requirements
+            for category_name, category_req in rf_req.items():
+                if not isinstance(category_req, dict):
+                    continue  # Skip non-category entries
+
+                # Get list of path IDs for this category
+                req_path_ids = category_req.get('paths', [])
+
+                # Check each path in performance data
+                for path in all_paths:
+                    path_id = path.get('id', '')
+                    path_name = path.get('name', path_id)
+                    path_type = path.get('type', 'RX')
+
+                    # Match path to category
+                    if path_id not in req_path_ids:
+                        continue  # Not in this category
+
+                    # Check noise figure (RX paths only)
+                    if path_type == 'RX' and 'max_noise_figure_db' in category_req:
+                        req_val = category_req['max_noise_figure_db']
+                        actual = path.get('cascade_nf_db', 0)
+                        passed = actual <= req_val
+                        result.checks.append(RequirementCheck(
+                            name=f"{path_name} NF",
+                            category="RF Chain",
+                            requirement=f"NF <= {req_val} dB",
+                            threshold=req_val,
+                            actual=actual,
+                            units="dB",
+                            passed=passed
+                        ))
+
+                    # Check gain (RX paths)
+                    if path_type == 'RX' and 'min_gain_db' in category_req:
+                        req_val = category_req['min_gain_db']
+                        actual = path.get('total_gain_db', 0)
+                        passed = actual >= req_val
+                        result.checks.append(RequirementCheck(
+                            name=f"{path_name} Gain",
+                            category="RF Chain",
+                            requirement=f"Gain >= {req_val} dB",
+                            threshold=req_val,
+                            actual=actual,
+                            units="dB",
+                            passed=passed
+                        ))
+
+                    # Check output power (TX paths)
+                    if path_type == 'TX' and 'min_output_power_dbm' in category_req:
+                        req_val = category_req['min_output_power_dbm']
+                        actual = path.get('output_power_dbm', 0)
+                        passed = actual >= req_val
+                        result.checks.append(RequirementCheck(
+                            name=f"{path_name} Output Power",
+                            category="RF Chain",
+                            requirement=f"Output >= {req_val} dBm",
+                            threshold=req_val,
+                            actual=actual,
+                            units="dBm",
+                            passed=passed
+                        ))
+
+                    # Check max gain (TX paths)
+                    if path_type == 'TX' and 'max_gain_db' in category_req:
+                        req_val = category_req['max_gain_db']
+                        actual = path.get('total_gain_db', 0)
+                        passed = actual <= req_val
+                        result.checks.append(RequirementCheck(
+                            name=f"{path_name} Max Gain",
+                            category="RF Chain",
+                            requirement=f"Gain <= {req_val} dB",
+                            threshold=req_val,
+                            actual=actual,
+                            units="dB",
+                            passed=passed
+                        ))
+
+        # Legacy single-path checks (backward compatibility)
+        elif 'max_noise_figure_db' in rf_req and 'noise_figure_db' in performance:
             req_val = rf_req['max_noise_figure_db']
             actual = performance['noise_figure_db']
             passed = actual <= req_val
@@ -266,7 +349,7 @@ def check_compliance(
                 passed=passed
             ))
 
-        if 'min_gain_db' in rf_req and 'rf_gain_db' in performance:
+        elif 'min_gain_db' in rf_req and 'rf_gain_db' in performance:
             req_val = rf_req['min_gain_db']
             actual = performance['rf_gain_db']
             passed = actual >= req_val
