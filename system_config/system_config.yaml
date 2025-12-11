@@ -6,17 +6,17 @@
 # FREQUENCY CONFIGURATION
 # =============================================================================
 frequency:
-  min_ghz: 2.0                    # Minimum operating frequency
+  min_ghz: 0.5                    # Minimum operating frequency
   max_ghz: 18.0                   # Maximum operating frequency
-  reference_ghz: 10.0             # Reference frequency for single-freq calculations
+  reference_ghz: 9.0             # Reference frequency for single-freq calculations
 
 # =============================================================================
 # ADC CONFIGURATION
 # =============================================================================
 adc:
   model: "High-Speed RF ADC"
-  sample_rate_gsps: 40.0          # Sample rate (>2x max freq for Nyquist)
-  resolution_bits: 12
+  sample_rate_gsps: 51.0          # Sample rate (>2x max freq for Nyquist)
+  resolution_bits: 10
 
   # Noise specification (choose format: dBc/Hz or dBFS/Hz)
   noise_format: "dBFS/Hz"         # 'dBc/Hz' or 'dBFS/Hz'
@@ -24,23 +24,23 @@ adc:
   # Per-band specifications (matched to frequency bands)
   bands:
     band_1:
-      freq_range_ghz: [2.0, 6.0]
+      freq_range_ghz: [0.50, 6.0]
       noise_density_db: -165      # dBFS/Hz or dBc/Hz depending on format
       sfdr_db: 72
       full_scale_dbm: 0           # Full scale input level
-      enob: 10.5                  # Effective number of bits
+      enob: 7.5                  # Effective number of bits
     band_2:
       freq_range_ghz: [6.0, 12.0]
       noise_density_db: -163
       sfdr_db: 70
       full_scale_dbm: -1
-      enob: 10.2
+      enob: 7.2
     band_3:
       freq_range_ghz: [12.0, 18.0]
       noise_density_db: -160
       sfdr_db: 68
       full_scale_dbm: -2
-      enob: 9.8
+      enob: 7.0
 
   # System-level derived parameters (calculated)
   input_impedance_ohm: 50
@@ -64,7 +64,7 @@ rf_chains:
       components:
         - name: "Spiral Antenna"
           type: "spiral"
-          gain_db: 5.0
+          gain_db: 3.0
           noise_figure_db: 0.0
         - name: "LNA"
           type: "amplifier"
@@ -85,16 +85,16 @@ rf_chains:
       num_paths: 1
       freq_range_ghz: [0.5, 2.0]
       cascade_noise_figure_db: 4.0
-      total_gain_db: 35.0
+      total_gain_db: 20.0
       damage_threshold_dbm: 15
       components:
         - name: "Wideband Antenna"
           type: "dipole"
-          gain_db: 2.0
+          gain_db: -5.0
           noise_figure_db: 0.0
         - name: "LNA"
           type: "amplifier"
-          gain_db: 30.0
+          gain_db: 20.0
           noise_figure_db: 2.0
         - name: "Cable"
           type: "coax"
@@ -122,8 +122,8 @@ rf_chains:
           gain_db: -2.0
         - name: "PA"
           type: "amplifier"
-          gain_db: 15.0
-          psat_dbm: 35
+          gain_db: 25.0
+          psat_dbm: 42
         - name: "Horn Antenna"
           type: "horn"
           gain_db: 12.0
@@ -214,9 +214,9 @@ antennas:
   # ESM/DF antenna (interferometer elements use this pattern)
   esm_antenna:
     type: "spiral"
-    beamwidth_deg: 90
-    peak_gain_dbi: 5.0
-    polarization: "RHCP"
+    beamwidth_deg: 70
+    peak_gain_dbi: 3.0
+    polarization: "LHCP"
 
   # Platform antenna positions for coverage analysis
   platform_antennas:
@@ -224,17 +224,17 @@ antennas:
       type: "spiral"
       position: "nose"
       orientation_deg: 0
-      peak_gain_dbi: 5.0
+      peak_gain_dbi: 3.0
     - name: "Left"
       type: "spiral"
       position: "port_wing"
       orientation_deg: -90
-      peak_gain_dbi: 5.0
+      peak_gain_dbi: -5.0
     - name: "Right"
       type: "spiral"
       position: "starboard_wing"
       orientation_deg: 90
-      peak_gain_dbi: 5.0
+      peak_gain_dbi: -5.0
     - name: "Aft"
       type: "spiral"
       position: "tail"

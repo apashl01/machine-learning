@@ -3,23 +3,51 @@
 **Target Repository:** Electronic Warfare System Analysis Framework
 **Objective:** Complete the remaining architectural refactoring and integration tasks.
 
-### Task 1: Enforce Centralized Configuration
-**Goal:** Force all analysis modules to load primary parameters from `system_config.yaml`.
+### Task 1: Enforce Centralized Configuration & Unified Architecture
+**Goal:** Consolidate all system parameters into `system_config.yaml` and `rf_chains.yaml`. Ensure all analysis modules read from these central files.
 
-*   **Target Files:** `adc_analysis/config/loader.py`, `antenna_coverage_analysis/config/loader.py`, `rf_chain_analysis/config/loader.py`, `direction_finding_analysis/config/loader.py`, `ekf_geolocation/config/loader.py`.
-    *   **Logic Update:** Modify the `load_config()` function in each loader.
-    *   **Dependency:** Import `system_config.load_system_config`.
-    *   **Implementation:**
-        1.  Load the central `system_config` object.
-        2.  Load the local YAML (only for module-specific details like jitter or simulation steps).
-        3.  **Overwrite** local values with system values:
-            *   ADC: `sample_rate`, `resolution`.
-            *   RF Chain: `freq_range`.
-            *   Antenna: `n_elements`, `positions`, `gain`.
-            *   Direction Finding: `n_elements`, `baseline`, `phase_error`.
-            *   EKF: Overwrite the entire `interferometer` object in `SimulationConfig` with data from `system_config.interferometer`.
-*   **Target File:** `ekf_geolocation/core/signal_propagation.py`
-    *   **Update:** Modify `calculate_signal_propagation` to accept `bandwidth_hz` and `noise_figure_db` as arguments (sourced from system config) rather than hardcoding `1e6` and `3.0`.
+*   **Sub-task 1.0: Centralize Config Directory & Move Files**
+    *   **Action:** Create a top-level `config/` directory.
+    *   **Move:** Move `system_config/system_config.yaml` and `rf_chain_analysis/config/rf_chains.yaml` to `config/`.
+    *   **Update:** Update `system_config/loader.py` to point to this new location.
+
+*   **Sub-task 1.1: Consolidate Hardware Definitions (Data Migration)**
+    *   **ADC Specs:**
+        *   **Source:** `adc_analysis/config/adc_specs_model1.yaml`.
+        *   **Dest:** Merge these parameters (sample rate, bits, bands, spurious) into `config/system_config.yaml` under the `adc` section.
+    *   **Interferometer Specs:**
+        *   **Source:** `direction_finding_analysis/config/interferometer_config.yaml`.
+        *   **Dest:** Ensure `config/system_config.yaml` has the correct `element_positions`, `n_elements`, and `phase_error`.
+    *   **Antenna Specs:**
+        *   **Source:** `antenna_coverage_analysis/config/uav_config.yaml`.
+        *   **Dest:** Merge antenna definitions (gain, beamwidth) into `config/system_config.yaml` under the `antennas` section.
+
+*   **Sub-task 1.2: Refactor RF Chain Architecture (Linked Files)**
+    *   **`config/rf_chains.yaml`**: Modify this file to contain **ONLY** the `components` section (The Component Library).
+    *   **`config/system_config.yaml`**: Move the `chain_archetypes` and `paths` sections here (The System Blueprint).
+    *   **Update `system_config/loader.py`**:
+        *   Load both files.
+        *   Resolve component references: When parsing a chain in `system_config`, look up the component details in `rf_chains`.
+        *   **Fix Gain Bug:** Implement the dynamic `total_gain_db` calculation (sum of components) and remove the hardcoded field.
+        *   **Unify Antennas:** When parsing an RF chain component of type `antenna`, resolve its specs by looking up the ID in the `antennas` section of `system_config`.
+
+*   **Sub-task 1.3: Update Analysis Loaders (Code Updates)**
+    *   **`adc_analysis/config/loader.py`**:
+        *   Import `system_config.load_system_config`.
+        *   Map `system_config.adc` data to the `ADCSpecs` class.
+        *   Remove dependency on local `adc_specs.yaml`.
+    *   **`direction_finding_analysis/config/loader.py`**:
+        *   Import `system_config.load_system_config`.
+        *   Load hardware specs (positions, etc.) from `system_config.interferometer`.
+        *   Load *only* simulation settings (angles, test freqs) from local `interferometer_config.yaml`.
+    *   **`antenna_coverage_analysis/config/loader.py`**:
+        *   Import `system_config.load_system_config`.
+        *   Load antenna definitions from `system_config.antennas`.
+    *   **`ekf_geolocation/config/loader.py`**:
+        *   Import `system_config.load_system_config`.
+        *   Replace local interferometer/emitter config with data from `system_config`.
+    *   **`rf_chain_analysis/example_analysis.py`**:
+        *   Update to use `load_system_config` (or the new RF library loader) instead of the legacy `load_chain_config`.
 
 ### Task 2: Multi-Band & Multi-Role Antenna Coverage
 **Goal:** Generate separate coverage maps for Low/Mid bands and TX/RX paths.
@@ -69,3 +97,11 @@
 *   **Target File:** `ekf_geolocation/core/ekf.py`
     *   **Metric Calculation:** Add a function `calculate_convergence_metrics(errors, threshold)`.
     *   **New Metric:** Implement "Error after N valid measurements". Find the index where `cumulative_valid_measurements == N`, and report the position error at that index.
+
+### Task 8: Repository Cleanup
+**Goal:** Organize file structure for clarity.
+
+*   **MATLAB Files:**
+    *   **Action:** Create a `matlab_reference/` directory at the project root.
+    *   **Move:** Move all `.m` files from the root and subdirectories into this new folder.
+    *   **Rationale:** Separates legacy reference code from the active Python implementation.
