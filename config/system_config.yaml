@@ -45,6 +45,27 @@ adc:
   # System-level derived parameters (calculated)
   input_impedance_ohm: 50
 
+  # Timing specs (Task 1.1: Consolidated from adc_config.yaml)
+  aperture_jitter_ps: 0.5       # Aperture jitter (ps RMS)
+  clock_jitter_fs: 100          # Clock jitter (fs RMS)
+
+# =============================================================================
+# PASSIVE COMPONENT SPECS (Task 1.1: Consolidated from adc_config.yaml)
+# =============================================================================
+passive_components:
+  cable_loss_db: 3.0
+  coupler_loss_db: 0.5
+  switch_loss_db: 1.0
+  filter_loss_db: 0.8
+
+# =============================================================================
+# ENVIRONMENT PARAMETERS (Task 1.1: Consolidated from esm_analysis config)
+# =============================================================================
+environment:
+  temperature_k: 290              # Ambient temperature (Kelvin)
+  propagation_model: "free_space" # free_space, two_ray, ITU_P676
+  include_atmospheric_loss: false
+
 # =============================================================================
 # RF CHAIN CONFIGURATION
 # =============================================================================
@@ -178,38 +199,126 @@ interferometer:
     orientation_deg: [0.0, 0.0, 0.0]  # [Roll, Pitch, Yaw]
 
 # =============================================================================
-# ANTENNA CONFIGURATION
+# PLATFORM CONFIGURATION (Task 1.1: Consolidated from uav_config.yaml)
+# =============================================================================
+platform:
+  name: "UAV Platform"
+  # UAV dimensions (meters)
+  geometry:
+    length_m: 2.0
+    width_m: 2.5      # Increased for wing-mounted antennas
+
+  # Operational parameters
+  altitude_m: 5000    # Default operating altitude MSL
+  speed_mps: 100      # Platform speed (m/s)
+
+# =============================================================================
+# ANTENNA CONFIGURATION (Task 1.1: Consolidated from uav_config.yaml)
 # =============================================================================
 antennas:
-  # ESM/DF antenna (interferometer elements use this pattern)
-  esm_antenna:
-    type: "spiral"
-    beamwidth_deg: 70
-    peak_gain_dbi: 3.0
-    polarization: "LHCP"
+  # ESM/DF antenna pattern (interferometer elements use this)
+  esm_peak_gain_dbi: 3.0
+  esm_beamwidth_deg: 70
+  esm_type: "spiral"
+  esm_polarization: "LHCP"
+  esm_front_to_back_db: 15
 
-  # Platform antenna positions for coverage analysis
-  platform_antennas:
-    - name: "Forward"
+  # -------------------------------------------------------------------------
+  # RECEIVE ANTENNAS
+  # -------------------------------------------------------------------------
+  # RX antenna positions [x, y, z] in meters
+  # Coordinate system: X=forward, Y=right, Z=up
+  rx_antennas:
+    # 2-18 GHz RX Antennas (7 total) - Interferometer/ESM
+    # Nose antennas (2)
+    - name: "Nose Left"
+      position: [0.8, -0.15, 0.0]
+      orientation: [-45, 0]       # [azimuth, elevation] in degrees
+      freq_band: "2-18 GHz"
       type: "spiral"
-      position: "nose"
-      orientation_deg: 0
       peak_gain_dbi: 3.0
-    - name: "Left"
+      beamwidth_deg: 70
+
+    - name: "Nose Right"
+      position: [0.8, 0.15, 0.0]
+      orientation: [45, 0]
+      freq_band: "2-18 GHz"
       type: "spiral"
-      position: "port_wing"
-      orientation_deg: -90
+      peak_gain_dbi: 3.0
+      beamwidth_deg: 70
+
+    # Left fuselage antennas (4 in a line for interferometer)
+    - name: "Left Fuse 1"
+      position: [0.1, -0.6, 0.0]
+      orientation: [-90, 0]
+      freq_band: "2-18 GHz"
+      type: "spiral"
+      peak_gain_dbi: 3.0
+      beamwidth_deg: 70
+
+    - name: "Left Fuse 2"
+      position: [0.05, -0.6, 0.0]
+      orientation: [-90, 0]
+      freq_band: "2-18 GHz"
+      type: "spiral"
+      peak_gain_dbi: 3.0
+      beamwidth_deg: 70
+
+    - name: "Left Fuse 3"
+      position: [-0.05, -0.6, 0.0]
+      orientation: [-90, 0]
+      freq_band: "2-18 GHz"
+      type: "spiral"
+      peak_gain_dbi: 3.0
+      beamwidth_deg: 70
+
+    - name: "Left Fuse 4"
+      position: [-0.1, -0.6, 0.0]
+      orientation: [-90, 0]
+      freq_band: "2-18 GHz"
+      type: "spiral"
+      peak_gain_dbi: 3.0
+      beamwidth_deg: 70
+
+    # Right fuselage antenna (1)
+    - name: "Right Fuse"
+      position: [0.0, 0.6, 0.0]
+      orientation: [90, 0]
+      freq_band: "2-18 GHz"
+      type: "spiral"
+      peak_gain_dbi: 3.0
+      beamwidth_deg: 70
+
+    # Low-band RX (<2 GHz) - 1 antenna
+    - name: "Low-Band RX"
+      position: [-0.4, 1.0, 0.0]   # Right wing
+      orientation: [0, 0]
+      freq_band: "<2 GHz"
+      type: "dipole"
       peak_gain_dbi: -5.0
-    - name: "Right"
-      type: "spiral"
-      position: "starboard_wing"
-      orientation_deg: 90
-      peak_gain_dbi: -5.0
-    - name: "Aft"
-      type: "spiral"
-      position: "tail"
-      orientation_deg: 180
-      peak_gain_dbi: 5.0
+      beamwidth_deg: 120
+
+  # -------------------------------------------------------------------------
+  # TRANSMIT ANTENNAS
+  # -------------------------------------------------------------------------
+  tx_antennas:
+    # 2-18 GHz TX - Narrow beam horn, forward facing
+    - name: "TX Horn (2-18 GHz)"
+      position: [0.8, 0.0, 0.0]   # Nose, centered
+      orientation: [0, 0]
+      freq_band: "2-18 GHz"
+      type: "horn"
+      beamwidth_deg: 30
+      peak_gain_dbi: 12
+
+    # <2 GHz TX - Wide beam/omni, wing-mounted
+    - name: "TX Low-Band (<2 GHz)"
+      position: [-0.4, -1.0, 0.0]   # Left wing
+      orientation: [0, 0]
+      freq_band: "<2 GHz"
+      type: "omni"
+      beamwidth_deg: 360
+      peak_gain_dbi: -2
 
 # =============================================================================
 # DERIVED SYSTEM PARAMETERS (Calculated at runtime)
