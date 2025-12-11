@@ -252,21 +252,32 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         input_impedance_ohm=float(adc_data['input_impedance_ohm'])
     )
 
-    # Parse RF chain config
-    rf_data = data['rf_chain']
+    # Parse RF chain config from rf_chains.rx_paths (use primary RX path)
+    rf_chains_data = data.get('rf_chains', {})
+    rx_paths = rf_chains_data.get('rx_paths', {})
+
+    # Get primary RX path (2-18 GHz) or first available
+    primary_rx_key = 'rx_2_18ghz'
+    if primary_rx_key not in rx_paths and rx_paths:
+        primary_rx_key = list(rx_paths.keys())[0]
+
+    rf_data = rx_paths.get(primary_rx_key, {})
     rf_components = []
     for comp_data in rf_data.get('components', []):
         rf_components.append(RFChainComponent(
             name=comp_data['name'],
             type=comp_data['type'],
-            gain_db=float(comp_data['gain_db']),
-            noise_figure_db=float(comp_data['noise_figure_db'])
+            gain_db=float(comp_data.get('gain_db', 0)),
+            noise_figure_db=float(comp_data.get('noise_figure_db', 0))
         ))
 
+    # Calculate total gain dynamically from components (Task 3 fix)
+    total_gain_db = sum(comp.gain_db for comp in rf_components) if rf_components else 30.0
+
     rf_chain = RFChainConfig(
-        cascade_noise_figure_db=float(rf_data['cascade_noise_figure_db']),
-        total_gain_db=float(rf_data['total_gain_db']),
-        damage_threshold_dbm=float(rf_data['damage_threshold_dbm']),
+        cascade_noise_figure_db=float(rf_data.get('cascade_noise_figure_db', 3.5)),
+        total_gain_db=total_gain_db,  # Now calculated dynamically
+        damage_threshold_dbm=float(rf_data.get('damage_threshold_dbm', 10)),
         components=rf_components
     )
 

@@ -153,36 +153,6 @@ rf_chains:
           gain_db: -2.0
           beamwidth_deg: 360.0
 
-# Legacy single-chain reference (for backwards compatibility)
-rf_chain:
-  # Cascade noise figure (from rf_chain_analysis or measured)
-  cascade_noise_figure_db: 3.5    # Total system NF
-
-  # Total gain before ADC
-  total_gain_db: 30.0
-
-  # Component-level details (optional, for detailed analysis)
-  components:
-    - name: "Antenna"
-      type: "spiral"
-      gain_db: 5.0
-      noise_figure_db: 0.0
-    - name: "LNA"
-      type: "amplifier"
-      gain_db: 25.0
-      noise_figure_db: 1.5
-    - name: "Cable"
-      type: "coax"
-      gain_db: -2.0
-      noise_figure_db: 2.0
-    - name: "Filter"
-      type: "bandpass"
-      gain_db: -1.5
-      noise_figure_db: 1.5
-
-  # Damage threshold
-  damage_threshold_dbm: 10
-
 # =============================================================================
 # INTERFEROMETER CONFIGURATION (Single Source of Truth)
 # =============================================================================

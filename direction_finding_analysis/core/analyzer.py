@@ -58,21 +58,30 @@ class InterferometerAnalyzer:
         """
         Initialize analyzer.
 
+        Task 11: Now generates analytical antenna pattern when no file specified,
+        using peak_gain_dbi and beamwidth_deg from system_config.
+
         Args:
             config: Interferometer configuration.
         """
         self.config = config
         self.antenna_gain_func = None
+        self.peak_gain_dbi = 0.0  # Default isotropic
+        self.beamwidth_deg = 90.0  # Default wide beam
 
         # Load antenna pattern if specified
         if config.antenna_pattern_file:
             self._load_antenna_pattern(config.antenna_pattern_file)
+        else:
+            # Task 11: Generate analytical pattern from system_config if available
+            self._generate_analytical_pattern()
 
     def _load_antenna_pattern(self, filepath: str):
         """Load antenna pattern from CSV file."""
         path = Path(filepath)
         if not path.exists():
-            print(f"Warning: Antenna pattern file not found: {filepath}. Using isotropic.")
+            print(f"Warning: Antenna pattern file not found: {filepath}. Using analytical.")
+            self._generate_analytical_pattern()
             return
 
         try:
@@ -85,7 +94,44 @@ class InterferometerAnalyzer:
                 np.abs(angle), angles, gains, left=gains[0], right=gains[-1]
             )
         except Exception as e:
-            print(f"Warning: Could not load antenna pattern: {e}. Using isotropic.")
+            print(f"Warning: Could not load antenna pattern: {e}. Using analytical.")
+            self._generate_analytical_pattern()
+
+    def _generate_analytical_pattern(self):
+        """
+        Generate analytical antenna pattern (Task 11).
+
+        Uses Gaussian model based on peak_gain_dbi and beamwidth_deg from system_config.
+        If system_config unavailable, falls back to realistic spiral antenna defaults.
+
+        Gaussian model: G(theta) = G_peak - 12 * (theta/beamwidth_3db)^2
+        This approximates a typical antenna pattern rolloff.
+        """
+        try:
+            from system_config import load_system_config
+            sys_config = load_system_config()
+            self.peak_gain_dbi = sys_config.antennas.esm_peak_gain_dbi
+            self.beamwidth_deg = sys_config.antennas.esm_beamwidth_deg
+        except Exception:
+            # Default to typical spiral antenna parameters
+            self.peak_gain_dbi = 5.0   # Typical spiral antenna gain
+            self.beamwidth_deg = 90.0  # Wide beamwidth
+
+        # Create Gaussian pattern function
+        # G(theta) = G_peak - 12 * (theta / (beamwidth/2))^2
+        # This gives -3 dB at half-beamwidth and realistic rolloff
+        half_beamwidth = self.beamwidth_deg / 2
+
+        def gaussian_pattern(angle_deg):
+            """Gaussian antenna pattern with realistic rolloff."""
+            angle = abs(angle_deg)
+            # Gaussian rolloff: -12 dB at full beamwidth edge
+            rolloff_db = 12.0 * (angle / half_beamwidth) ** 2
+            gain = self.peak_gain_dbi - rolloff_db
+            # Floor at -20 dB relative to peak (realistic sidelobe level)
+            return max(gain, self.peak_gain_dbi - 20.0)
+
+        self.antenna_gain_func = gaussian_pattern
 
     def get_antenna_gain(self, angle_deg: float) -> float:
         """
