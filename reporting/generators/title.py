@@ -24,7 +24,7 @@ def add_summary_slide(gen: DesignReviewGenerator,
                       key_findings: List[str] = None,
                       recommendations: Optional[List[str]] = None,
                       next_steps: Optional[List[str]] = None,
-                      compliance_result: Optional[Dict] = None):
+                      compliance_result = None):
     """
     Add summary/conclusions slide.
 
@@ -35,7 +35,7 @@ def add_summary_slide(gen: DesignReviewGenerator,
         key_findings: List of key findings (used if compliance_result not provided)
         recommendations: Optional list of recommendations
         next_steps: Optional list of next steps
-        compliance_result: Optional compliance result dict for dynamic dashboard
+        compliance_result: Optional ComplianceResult dataclass for dynamic dashboard
     """
     gen.add_section_slide("Summary & Conclusions")
 
@@ -64,19 +64,22 @@ def add_summary_slide(gen: DesignReviewGenerator,
         )
 
 
-def _add_compliance_dashboard(gen: DesignReviewGenerator, compliance_result: Dict):
+def _add_compliance_dashboard(gen: DesignReviewGenerator, compliance_result):
     """
     Generate dynamic compliance dashboard (Task 10).
 
     Groups compliance checks by category and shows pass/fail statistics.
+
+    Args:
+        compliance_result: ComplianceResult dataclass instance
     """
     # Group checks by category
     categories = {}
-    for check in compliance_result.get('checks', []):
-        category = check.get('category', 'General')
+    for check in compliance_result.checks:
+        category = check.category
         if category not in categories:
             categories[category] = {'passed': 0, 'failed': 0, 'checks': []}
-        if check.get('passed', False):
+        if check.passed:
             categories[category]['passed'] += 1
         else:
             categories[category]['failed'] += 1
@@ -115,7 +118,7 @@ def _add_compliance_dashboard(gen: DesignReviewGenerator, compliance_result: Dic
         findings.append("Failed requirements:")
         for cat_name, cat_data in categories.items():
             for check in cat_data['checks']:
-                if not check.get('passed', False):
-                    findings.append(f"   {check.get('requirement', 'Unknown')}: {check.get('actual', 'N/A')}")
+                if not check.passed:
+                    findings.append(f"   {check.requirement}: {check.actual:.2f} {check.units}")
 
     gen.add_content_slide("Compliance Summary", bullets=findings)
