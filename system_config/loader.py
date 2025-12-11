@@ -149,7 +149,7 @@ class InterferometerConfig:
 
 @dataclass
 class PlatformAntenna:
-    """Platform antenna configuration."""
+    """Platform antenna configuration (legacy format)."""
     name: str
     type: str
     position: str
@@ -158,13 +158,42 @@ class PlatformAntenna:
 
 
 @dataclass
+class DetailedAntenna:
+    """Detailed antenna specification with position coordinates."""
+    name: str
+    position: List[float]         # [x, y, z] in meters
+    orientation: List[float]       # [azimuth, elevation] in degrees
+    freq_band: str
+    antenna_type: str
+    peak_gain_dbi: float
+    beamwidth_deg: float
+
+
+@dataclass
+class PlatformConfig:
+    """Platform configuration (Task 1.1)."""
+    name: str
+    length_m: float
+    width_m: float
+    altitude_m: float
+    speed_mps: float
+
+
+@dataclass
 class AntennaConfig:
-    """Antenna configuration."""
+    """Antenna configuration (Task 1.1: Updated structure)."""
     esm_type: str
     esm_beamwidth_deg: float
     esm_peak_gain_dbi: float
     esm_polarization: str
-    platform_antennas: List[PlatformAntenna]
+    esm_front_to_back_db: float = 15.0
+
+    # Detailed antenna arrays (Task 1.1)
+    rx_antennas: List[DetailedAntenna] = field(default_factory=list)
+    tx_antennas: List[DetailedAntenna] = field(default_factory=list)
+
+    # Legacy platform antennas (for backward compatibility)
+    platform_antennas: List[PlatformAntenna] = field(default_factory=list)
 
 
 @dataclass
@@ -180,6 +209,7 @@ class SystemConfig:
     rf_chain: RFChainConfig
     interferometer: InterferometerConfig
     antennas: AntennaConfig
+    platform: Optional[PlatformConfig] = None  # Task 1.1: Platform config
 
     def print_summary(self):
         """Print configuration summary."""
@@ -298,10 +328,53 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         )
     )
 
-    # Parse antenna config
+    # Parse antenna config (Task 1.1: Updated to support new flattened structure)
     ant_data = data['antennas']
-    esm_ant = ant_data['esm_antenna']
 
+    # ESM antenna parameters (now flattened in YAML)
+    if 'esm_antenna' in ant_data:
+        # Old structure (backward compatibility)
+        esm_ant = ant_data['esm_antenna']
+        esm_type = esm_ant['type']
+        esm_beamwidth = float(esm_ant['beamwidth_deg'])
+        esm_gain = float(esm_ant['peak_gain_dbi'])
+        esm_pol = esm_ant['polarization']
+        esm_ftb = float(esm_ant.get('front_to_back_db', 15.0))
+    else:
+        # New flattened structure (Task 1.1)
+        esm_type = ant_data.get('esm_type', 'spiral')
+        esm_beamwidth = float(ant_data.get('esm_beamwidth_deg', 70))
+        esm_gain = float(ant_data.get('esm_peak_gain_dbi', 3.0))
+        esm_pol = ant_data.get('esm_polarization', 'LHCP')
+        esm_ftb = float(ant_data.get('esm_front_to_back_db', 15.0))
+
+    # Parse RX antennas (Task 1.1)
+    rx_antennas = []
+    for rx_data in ant_data.get('rx_antennas', []):
+        rx_antennas.append(DetailedAntenna(
+            name=rx_data['name'],
+            position=rx_data['position'],
+            orientation=rx_data['orientation'],
+            freq_band=rx_data.get('freq_band', '2-18 GHz'),
+            antenna_type=rx_data.get('type', 'spiral'),
+            peak_gain_dbi=float(rx_data.get('peak_gain_dbi', esm_gain)),
+            beamwidth_deg=float(rx_data.get('beamwidth_deg', esm_beamwidth))
+        ))
+
+    # Parse TX antennas (Task 1.1)
+    tx_antennas = []
+    for tx_data in ant_data.get('tx_antennas', []):
+        tx_antennas.append(DetailedAntenna(
+            name=tx_data['name'],
+            position=tx_data['position'],
+            orientation=tx_data['orientation'],
+            freq_band=tx_data.get('freq_band', '2-18 GHz'),
+            antenna_type=tx_data.get('type', 'horn'),
+            peak_gain_dbi=float(tx_data.get('peak_gain_dbi', 12.0)),
+            beamwidth_deg=float(tx_data.get('beamwidth_deg', 30.0))
+        ))
+
+    # Parse legacy platform antennas (backward compatibility)
     platform_antennas = []
     for pa_data in ant_data.get('platform_antennas', []):
         platform_antennas.append(PlatformAntenna(
@@ -313,12 +386,28 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         ))
 
     antennas = AntennaConfig(
-        esm_type=esm_ant['type'],
-        esm_beamwidth_deg=float(esm_ant['beamwidth_deg']),
-        esm_peak_gain_dbi=float(esm_ant['peak_gain_dbi']),
-        esm_polarization=esm_ant['polarization'],
+        esm_type=esm_type,
+        esm_beamwidth_deg=esm_beamwidth,
+        esm_peak_gain_dbi=esm_gain,
+        esm_polarization=esm_pol,
+        esm_front_to_back_db=esm_ftb,
+        rx_antennas=rx_antennas,
+        tx_antennas=tx_antennas,
         platform_antennas=platform_antennas
     )
+
+    # Parse platform config (Task 1.1)
+    platform = None
+    if 'platform' in data:
+        plat_data = data['platform']
+        geom_data = plat_data.get('geometry', {})
+        platform = PlatformConfig(
+            name=plat_data.get('name', 'UAV Platform'),
+            length_m=float(geom_data.get('length_m', 2.0)),
+            width_m=float(geom_data.get('width_m', 2.5)),
+            altitude_m=float(plat_data.get('altitude_m', 5000)),
+            speed_mps=float(plat_data.get('speed_mps', 100))
+        )
 
     return SystemConfig(
         freq_min_ghz=float(freq['min_ghz']),
@@ -327,5 +416,6 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         adc=adc,
         rf_chain=rf_chain,
         interferometer=interferometer,
-        antennas=antennas
+        antennas=antennas,
+        platform=platform  # Task 1.1
     )
