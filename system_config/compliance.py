@@ -82,9 +82,9 @@ class ComplianceResult:
 
 
 def load_requirements(path: Optional[str] = None) -> Dict:
-    """Load requirements from YAML file."""
+    """Load requirements from YAML file (Task 1.0: Updated to config/ directory)."""
     if path is None:
-        path = Path(__file__).parent / "requirements.yaml"
+        path = Path(__file__).parent.parent / "config" / "requirements.yaml"
     else:
         path = Path(path)
 

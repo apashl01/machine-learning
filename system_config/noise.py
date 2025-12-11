@@ -280,7 +280,8 @@ def calculate_multiband_noise_floor(
     config = load_system_config()
 
     # Load rf_chains directly from YAML for multi-path data
-    config_path = Path(__file__).parent / "system_config.yaml"
+    # Task 1.0: Updated to use centralized config/ directory
+    config_path = Path(__file__).parent.parent / "config" / "system_config.yaml"
     with open(config_path, 'r') as f:
         data = yaml.safe_load(f)
 

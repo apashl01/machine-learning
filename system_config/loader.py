@@ -221,7 +221,8 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         SystemConfig object
     """
     if config_path is None:
-        config_path = Path(__file__).parent / "system_config.yaml"
+        # Task 1.0: Updated to use centralized config/ directory
+        config_path = Path(__file__).parent.parent / "config" / "system_config.yaml"
     else:
         config_path = Path(config_path)
 

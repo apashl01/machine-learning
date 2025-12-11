@@ -338,8 +338,8 @@ def get_rf_chain_config():
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 
-    # Load rf_chains from system config YAML
-    config_path = Path(__file__).parent.parent / "system_config" / "system_config.yaml"
+    # Load rf_chains from system config YAML (Task 1.0: Updated to config/ directory)
+    config_path = Path(__file__).parent.parent / "config" / "system_config.yaml"
     with open(config_path, 'r') as f:
         data = yaml.safe_load(f)
 

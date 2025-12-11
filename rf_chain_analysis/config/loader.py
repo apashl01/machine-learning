@@ -573,7 +573,8 @@ def load_rf_chain_library(filepath: Union[str, Path] = None) -> RFChainLibrary:
         RFChainLibrary with all definitions loaded.
     """
     if filepath is None:
-        config_dir = Path(__file__).parent
+        # Task 1.0: Updated to use centralized config/ directory
+        config_dir = Path(__file__).parent.parent.parent / "config"
         filepath = config_dir / "rf_chains.yaml"
 
     filepath = Path(filepath)
