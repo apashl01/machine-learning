@@ -298,8 +298,8 @@ def load_from_system_config() -> MeasurementConfig:
     from pathlib import Path
     import yaml
 
-    # Load system config for ADC
-    sys_config_path = Path(__file__).parent.parent / "system_config" / "system_config.yaml"
+    # Load system config for ADC (Task 1.0: Updated to use centralized config/)
+    sys_config_path = Path(__file__).parent.parent / "config" / "system_config.yaml"
     with open(sys_config_path, 'r') as f:
         sys_data = yaml.safe_load(f)
 

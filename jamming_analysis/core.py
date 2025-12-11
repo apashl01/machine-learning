@@ -407,7 +407,8 @@ def load_jammer_from_system_config() -> JammerConfig:
     from pathlib import Path
     import yaml
 
-    config_path = Path(__file__).parent.parent / "system_config" / "system_config.yaml"
+    # Task 1.0: Updated to use centralized config/
+    config_path = Path(__file__).parent.parent / "config" / "system_config.yaml"
 
     with open(config_path, 'r') as f:
         data = yaml.safe_load(f)
