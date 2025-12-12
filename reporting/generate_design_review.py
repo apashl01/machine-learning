@@ -579,6 +579,7 @@ def get_antenna_config():
     from antenna_coverage_analysis.config.loader import load_uav_config
     from antenna_coverage_analysis import analyze_coverage
     from pathlib import Path
+    from dataclasses import replace
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -717,7 +718,6 @@ def get_antenna_config():
             return None
 
         # Create a modified config with only these antennas
-        from dataclasses import replace
         band_config = replace(uav_config, rx_antennas=antennas, antennas=antennas)
 
         # Run coverage analysis for this band
