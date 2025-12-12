@@ -18,7 +18,8 @@ from ..core import DesignReviewGenerator
 def add_jamming_slides(gen: DesignReviewGenerator,
                         jammer_config: Optional[Dict] = None,
                         radar_config: Optional[Dict] = None,
-                        output_dir: Optional[str] = None):
+                        output_dir: Optional[str] = None,
+                        title_suffix: Optional[str] = None):
     """
     Add Jamming Analysis slides.
 
@@ -27,6 +28,7 @@ def add_jamming_slides(gen: DesignReviewGenerator,
         jammer_config: Optional jammer configuration dict (includes platform_rcs_m2)
         radar_config: Optional radar configuration dict
         output_dir: Directory containing output plots
+        title_suffix: Optional suffix to add to slide titles (e.g., "Mid-Band")
     """
     try:
         from jamming_analysis import (
@@ -46,8 +48,12 @@ def add_jamming_slides(gen: DesignReviewGenerator,
     except ImportError:
         return  # Skip if module not available
 
-    gen.add_section_slide("Self-Protect Jamming Analysis",
-                          "TX Chain Performance & J/S Analysis")
+    # Build section title with optional suffix
+    section_title = "Self-Protect Jamming Analysis"
+    if title_suffix:
+        section_title += f" - {title_suffix}"
+
+    gen.add_section_slide(section_title, "TX Chain Performance & J/S Analysis")
 
     # Create default configs if not provided
     if jammer_config:

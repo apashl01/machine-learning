@@ -1162,7 +1162,36 @@ def generate_powerpoint(
     add_ekf_geolocation_slides(gen, config=ekf_config, results=ekf_results,
                                 output_dir=str(base_dir / "ekf_geolocation/output"))
 
-    add_jamming_slides(gen, output_dir=str(base_dir / "results"))
+    # Task 8: Multi-band jamming analysis - iterate over TX paths
+    if rf_config and 'tx_paths' in rf_config and rf_config['tx_paths']:
+        for tx_path in rf_config['tx_paths']:
+            # Extract band name from path name (e.g., "Primary TX (2-18 GHz)" → "Mid-Band")
+            band_name = tx_path['name']
+            freq_range = tx_path['freq_range_ghz']
+
+            # Determine band label
+            if freq_range[0] < 2.0:
+                band_label = "Low-Band (<2 GHz)"
+            else:
+                band_label = "Mid-Band (2-18 GHz)"
+
+            # Create jammer config from TX path
+            jammer_config = {
+                'input_power_dbm': tx_path.get('output_power_dbm', 50),
+                'antenna_gain_dbi': 20,  # Default TX antenna gain
+                'beamwidth_deg': 30,
+                'pattern_type': 'gaussian',
+                'frequency_ghz': sum(freq_range) / 2,  # Center frequency
+                'platform_rcs_m2': 2.0  # Default platform RCS
+            }
+
+            add_jamming_slides(gen,
+                              jammer_config=jammer_config,
+                              output_dir=str(base_dir / "results"),
+                              title_suffix=band_label)
+    else:
+        # Fallback: single jamming analysis without band-specific config
+        add_jamming_slides(gen, output_dir=str(base_dir / "results"))
 
     # Run compliance check
     from system_config import (
