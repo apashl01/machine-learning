@@ -506,68 +506,136 @@ def get_rf_chain_config():
     primary_rx = next((p for p in rx_paths_list if '2-18' in p['name']), rx_paths_list[0] if rx_paths_list else None)
 
     if primary_rx and primary_rx['components']:
-        from rf_chain_analysis import load_from_system_config as load_rf_chain, analyze_rf_chain
-        from rf_chain_analysis.visualization.plots import plot_power_tracking, plot_cascade_breakdown
-
         try:
-            # Load RF chain configuration from system config
-            chain_config = load_rf_chain(chain_type='receive')
+            # Generate power tracking plot manually
+            print("  Generating power tracking plot...")
+            input_power = -60.0  # Typical input signal
+            current_power = input_power
 
-            # Analyze the chain
-            print(f"  Analyzing {primary_rx['name']}...")
-            results = analyze_rf_chain(chain_config)
+            # Build power level trace through components
+            component_names = []
+            power_levels = [input_power]  # Start with input
 
-            # Get mid-frequency cascade result for detailed plots
-            mid_freq_result = results.mid_freq_summary
+            for comp in primary_rx['components']:
+                comp_name = comp.get('name', 'Unknown')
+                gain_db = comp.get('gain_db', 0)
+                current_power += gain_db
+                component_names.append(comp_name)
+                power_levels.append(current_power)
 
-            # Generate power tracking plot
-            if results.has_power_tracking and results.power_tracking:
-                print("  Generating power tracking plot...")
-                fig_power = plot_power_tracking(
-                    results.power_tracking,
-                    input_power_dbm=-60.0,  # Typical input signal
-                    chain_name=primary_rx['name']
-                )
-                power_path = output_dir / "rf_chain_power.png"
-                fig_power.savefig(power_path, dpi=150, bbox_inches='tight')
-                plt.close(fig_power)
-                print(f"    Power tracking plot saved to: {power_path}")
-            else:
-                # Generate power tracking plot manually
-                print("  Generating power tracking plot (manual)...")
-                from rf_chain_analysis.core.analyzer import PowerPoint
+            # Create power tracking plot
+            fig_power, ax = plt.subplots(figsize=(12, 6))
+            x_positions = np.arange(len(power_levels))
 
-                # Build power points from components
-                input_power = -60.0
-                power_points = []
-                current_power = input_power
+            ax.plot(x_positions, power_levels, 'o-', linewidth=2, markersize=10,
+                   color='purple', label='Signal Power')
 
-                for comp in primary_rx['components']:
-                    comp_name = comp.get('name', 'Unknown')
-                    gain_db = comp.get('gain_db', 0)
-                    output_power = current_power + gain_db
+            # Label x-axis with component names
+            x_labels = ['Input'] + component_names
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(x_labels, rotation=45, ha='right')
 
-                    power_point = PowerPoint(
-                        component_name=comp_name,
-                        input_power_dbm=current_power,
-                        output_power_dbm=output_power,
-                        gain_db=gain_db,
-                        p1db_dbm=comp.get('p1db_dbm', output_power + 20),
-                        is_compressed=False,
-                        compression_db=0.0
-                    )
-                    power_points.append(power_point)
-                    current_power = output_power
+            ax.set_xlabel('Stage', fontsize=12)
+            ax.set_ylabel('Power Level (dBm)', fontsize=12)
+            ax.set_title(f'{primary_rx["name"]} Power Tracking (Input: {input_power:.1f} dBm)',
+                        fontsize=13, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=11)
 
-                fig_power = plot_power_tracking(power_points, input_power, primary_rx['name'])
-                power_path = output_dir / "rf_chain_power.png"
-                fig_power.savefig(power_path, dpi=150, bbox_inches='tight')
-                plt.close(fig_power)
-                print(f"    Power tracking plot saved to: {power_path}")
+            fig_power.tight_layout()
+            power_path = output_dir / "rf_chain_power.png"
+            fig_power.savefig(power_path, dpi=150, bbox_inches='tight')
+            plt.close(fig_power)
+            print(f"    Power tracking plot saved to: {power_path}")
 
             # Generate cascade breakdown plot
             print("  Generating cascade breakdown plot...")
-            fig_cascade = plot_cascade_breakdown(mid_freq_result, title=f"{primary_rx['name']} Cascade Analysis")
+
+            # Calculate cumulative gain and NF
+            cumulative_gains = []
+            cumulative_nfs = []
+            component_gains = []
+            component_nfs = []
+
+            current_gain = 0
+            f_total = 1.0
+            g_cumulative = 1.0
+
+            for comp in primary_rx['components']:
+                g_db = comp.get('gain_db', 0)
+                nf_db = comp.get('noise_figure_db', 0)
+
+                component_gains.append(g_db)
+                component_nfs.append(nf_db)
+
+                current_gain += g_db
+                cumulative_gains.append(current_gain)
+
+                # Friis cascade NF
+                f_linear = 10 ** (nf_db / 10)
+                g_linear = 10 ** (g_db / 10)
+
+                if len(cumulative_nfs) == 0:
+                    f_total = f_linear
+                else:
+                    f_total += (f_linear - 1) / g_cumulative
+
+                g_cumulative *= g_linear
+                cumulative_nfs.append(10 * np.log10(f_total))
+
+            # Create 2x2 cascade breakdown plot
+            fig_cascade, axes = plt.subplots(2, 2, figsize=(14, 10))
+            x = np.arange(len(component_names))
+
+            # Plot 1: Component gains
+            ax1 = axes[0, 0]
+            colors = ['green' if g >= 0 else 'red' for g in component_gains]
+            ax1.bar(x, component_gains, width=0.6, color=colors, edgecolor='black')
+            ax1.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+            ax1.set_ylabel('Gain (dB)')
+            ax1.set_title('Individual Component Gain/Loss')
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(component_names, rotation=45, ha='right')
+            ax1.grid(True, alpha=0.3)
+
+            # Plot 2: Component NFs
+            ax2 = axes[0, 1]
+            ax2.bar(x, component_nfs, width=0.6, color='coral', edgecolor='black')
+            ax2.set_ylabel('Noise Figure (dB)')
+            ax2.set_title('Individual Component Noise Figure')
+            ax2.set_xticks(x)
+            ax2.set_xticklabels(component_names, rotation=45, ha='right')
+            ax2.grid(True, alpha=0.3)
+
+            # Plot 3: Cumulative gain
+            ax3 = axes[1, 0]
+            ax3.plot(x, cumulative_gains, 'o-', linewidth=2, markersize=8,
+                    color='green', label='Cumulative Gain')
+            ax3.fill_between(x, 0, cumulative_gains, alpha=0.3, color='green')
+            ax3.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+            ax3.set_ylabel('Cumulative Gain (dB)')
+            ax3.set_title('Cumulative Gain Through Chain')
+            ax3.set_xticks(x)
+            ax3.set_xticklabels(component_names, rotation=45, ha='right')
+            ax3.grid(True, alpha=0.3)
+            ax3.legend()
+
+            # Plot 4: Cumulative NF
+            ax4 = axes[1, 1]
+            ax4.plot(x, cumulative_nfs, 's-', linewidth=2, markersize=8,
+                    color='coral', label='Cumulative NF')
+            ax4.fill_between(x, 0, cumulative_nfs, alpha=0.3, color='coral')
+            ax4.set_ylabel('Cumulative NF (dB)')
+            ax4.set_title('Cumulative Noise Figure (Friis)')
+            ax4.set_xticks(x)
+            ax4.set_xticklabels(component_names, rotation=45, ha='right')
+            ax4.grid(True, alpha=0.3)
+            ax4.legend()
+
+            fig_cascade.suptitle(f'{primary_rx["name"]} Cascade Analysis',
+                               fontsize=14, fontweight='bold')
+            fig_cascade.tight_layout()
+
             cascade_path = output_dir / "rf_chain_cascade.png"
             fig_cascade.savefig(cascade_path, dpi=150, bbox_inches='tight')
             plt.close(fig_cascade)
