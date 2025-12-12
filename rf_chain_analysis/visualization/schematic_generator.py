@@ -24,13 +24,20 @@ SVG_CONVERTER = None
 try:
     import cairosvg
     SVG_CONVERTER = 'cairosvg'
-except ImportError:
-    # Check if Inkscape is available in PATH
-    if os.system('inkscape --version > /dev/null 2>&1') == 0:
-        SVG_CONVERTER = 'inkscape'
-    # Check if rsvg-convert is available
-    elif os.system('rsvg-convert --version > /dev/null 2>&1') == 0:
-        SVG_CONVERTER = 'rsvg-convert'
+except (ImportError, OSError):
+    # cairosvg not available or Cairo library not installed
+    # Try svglib + reportlab (pure Python, works on Windows)
+    try:
+        from svglib.svglib import svg2rlg
+        from reportlab.graphics import renderPM
+        SVG_CONVERTER = 'svglib'
+    except ImportError:
+        # Check if Inkscape is available in PATH
+        if os.system('inkscape --version > /dev/null 2>&1') == 0:
+            SVG_CONVERTER = 'inkscape'
+        # Check if rsvg-convert is available
+        elif os.system('rsvg-convert --version > /dev/null 2>&1') == 0:
+            SVG_CONVERTER = 'rsvg-convert'
 
 
 def convert_svg_to_png(svg_path: Path, png_path: Path, dpi: int = 150) -> bool:
@@ -45,6 +52,30 @@ def convert_svg_to_png(svg_path: Path, png_path: Path, dpi: int = 150) -> bool:
             return True
         except Exception as e:
             print(f"  cairosvg conversion failed: {e}")
+            return False
+
+    elif SVG_CONVERTER == 'svglib':
+        try:
+            from svglib.svglib import svg2rlg
+            from reportlab.graphics import renderPM
+
+            # Load SVG
+            drawing = svg2rlg(str(svg_path))
+            if drawing is None:
+                print(f"  svglib: Failed to load SVG")
+                return False
+
+            # Scale based on DPI (default is 72 DPI for reportlab)
+            scale = dpi / 72.0
+            drawing.width *= scale
+            drawing.height *= scale
+            drawing.scale(scale, scale)
+
+            # Render to PNG
+            renderPM.drawToFile(drawing, str(png_path), fmt='PNG', dpi=dpi)
+            return True
+        except Exception as e:
+            print(f"  svglib conversion failed: {e}")
             return False
 
     elif SVG_CONVERTER == 'inkscape':
@@ -73,7 +104,10 @@ def convert_svg_to_png(svg_path: Path, png_path: Path, dpi: int = 150) -> bool:
 
     else:
         print("  No SVG to PNG converter available")
-        print("  Install one of: cairosvg (pip install cairosvg), inkscape, or librsvg")
+        print("  Install one of:")
+        print("    - svglib + reportlab (recommended for Windows): pip install svglib reportlab pillow")
+        print("    - cairosvg (requires Cairo C library): pip install cairosvg")
+        print("    - inkscape or librsvg (system tools)")
         return False
 
 
