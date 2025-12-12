@@ -90,30 +90,3 @@ def add_direction_finding_slides(gen: DesignReviewGenerator,
                 image_path=str(main_plot),
                 image_width=10.0
             )
-
-        # Angle error vs frequency (alternate name)
-        angle_error_plot = output_path / "df_angle_error.png"
-        if angle_error_plot.exists():
-            gen.add_content_slide(
-                "Angle Error vs Frequency",
-                image_path=str(angle_error_plot),
-                image_width=10.0
-            )
-
-        # Angle error vs incident angle (alternate name)
-        incident_plot = output_path / "df_incident_angle.png"
-        if incident_plot.exists():
-            gen.add_content_slide(
-                "Angle Error vs Incident Angle",
-                image_path=str(incident_plot),
-                image_width=10.0
-            )
-
-        # Ambiguity analysis (alternate name)
-        ambiguity_plot = output_path / "df_ambiguity.png"
-        if ambiguity_plot.exists():
-            gen.add_content_slide(
-                "Ambiguity Analysis",
-                image_path=str(ambiguity_plot),
-                image_width=10.0
-            )

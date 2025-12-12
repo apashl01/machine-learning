@@ -71,34 +71,3 @@ def add_adc_slides(gen: DesignReviewGenerator,
 
         if metrics:
             gen.add_metrics_slide("ADC Performance Metrics", metrics)
-
-    # Plots
-    if output_dir:
-        output_path = Path(output_dir)
-
-        # SFDR vs frequency
-        sfdr_plot = output_path / "adc_sfdr.png"
-        if sfdr_plot.exists():
-            gen.add_content_slide(
-                "SFDR vs Frequency",
-                image_path=str(sfdr_plot),
-                image_width=10.0
-            )
-
-        # ENOB vs frequency
-        enob_plot = output_path / "adc_enob.png"
-        if enob_plot.exists():
-            gen.add_content_slide(
-                "Effective Number of Bits",
-                image_path=str(enob_plot),
-                image_width=10.0
-            )
-
-        # Comparison plot
-        comparison_plot = output_path / "adc_comparison.png"
-        if comparison_plot.exists():
-            gen.add_content_slide(
-                "ADC Comparison",
-                image_path=str(comparison_plot),
-                image_width=10.0
-            )
