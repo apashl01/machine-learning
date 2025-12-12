@@ -1106,19 +1106,15 @@ def generate_powerpoint(
     # Title slide
     add_title_slide(gen, subtitle="Preliminary Design Review - Generated from Shared Config")
 
-    # Agenda
+    # Agenda - SDR-appropriate flow
     gen.add_content_slide(
         "Agenda",
         bullets=[
-            "System Configuration Overview",
-            "ESM Analysis - Detection range and sensitivity",
-            "RF Chain Analysis - Multi-band link budget (Low/Mid)",
-            "ADC Analysis - Digitizer specifications",
-            "Direction Finding - Interferometer accuracy",
-            "Antenna Coverage - RX/TX pattern analysis",
-            "EKF Geolocation - Emitter localization simulation",
-            "Requirements Compliance Matrix",
-            "Summary & Next Steps"
+            "Overview & Context",
+            "Subsystem Design - Antenna, RF Chain, ADC",
+            "Functional Analysis - ESM, DF, Geolocation, Jamming",
+            "Verification & Compliance",
+            "Summary & Path Forward"
         ]
     )
 
@@ -1135,11 +1131,12 @@ def generate_powerpoint(
         }
     )
 
-    # Add analysis sections
+    # Add analysis sections in SDR-appropriate order
     base_dir = Path(__file__).parent.parent
 
-    add_esm_slides(gen, config=esm_config, results=esm_results,
-                   output_dir=str(base_dir / "results"))
+    # Section 1: Subsystem Design & Performance
+    add_antenna_coverage_slides(gen, config=ant_config, results=ant_results,
+                                 output_dir=str(base_dir / "antenna_coverage_analysis/output"))
 
     add_rf_chain_slides(gen, config=rf_config, results=rf_results,
                         output_dir=str(base_dir / "rf_chain_analysis/output"))
@@ -1147,16 +1144,16 @@ def generate_powerpoint(
     add_adc_slides(gen, config=adc_config, results=adc_results,
                    output_dir=str(base_dir / "adc_analysis/output"))
 
+    # Section 2: Functional Analysis & Performance
+    add_esm_slides(gen, config=esm_config, results=esm_results,
+                   output_dir=str(base_dir / "results"))
+
     add_direction_finding_slides(gen, config=df_config, results=df_results,
                                   output_dir=str(base_dir / "direction_finding_analysis/output"))
-
-    add_antenna_coverage_slides(gen, config=ant_config, results=ant_results,
-                                 output_dir=str(base_dir / "antenna_coverage_analysis/output"))
 
     add_ekf_geolocation_slides(gen, config=ekf_config, results=ekf_results,
                                 output_dir=str(base_dir / "ekf_geolocation/output"))
 
-    # Add jamming analysis slides (Task 4.1 - Phase 2 Enhancement)
     add_jamming_slides(gen, output_dir=str(base_dir / "results"))
 
     # Run compliance check
