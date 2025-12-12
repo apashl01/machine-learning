@@ -364,6 +364,50 @@ def compare_to_radar_range(radar: RadarParameters,
     }
 
 
+def calculate_dynamic_detection_requirement(radar: RadarParameters,
+                                           platform_rcs_m2: float = 2.0,
+                                           range_multiplier: float = 1.2,
+                                           radar_processing_gain_dB: float = 20.0) -> float:
+    """
+    Calculate dynamic detection range requirement based on threat radar's own range.
+
+    The requirement is set as a multiple of the threat radar's detection range
+    against the platform, ensuring we can detect the radar before it detects us.
+
+    Args:
+        radar: RadarParameters for the threat radar
+        platform_rcs_m2: Platform radar cross section (m²)
+        range_multiplier: Safety factor (default 1.2 = 20% beyond radar's range)
+        radar_processing_gain_dB: Radar processing gain
+
+    Returns:
+        Required detection range in meters
+    """
+    # Calculate radar detection range using radar range equation (R^4)
+    radar_bw_Hz = radar.bandwidth_MHz * 1e6
+    radar_nf = 10 ** (3.0 / 10)  # Assume 3 dB NF for radar
+    radar_snr_req = 10 ** (13.0 / 10)  # 13 dB SNR for detection
+    radar_loss = 10 ** (6.0 / 10)  # 6 dB system losses
+    proc_gain = 10 ** (radar_processing_gain_dB / 10)
+
+    # Monostatic radar (Gt = Gr)
+    Gt = 10 ** (radar.antenna_gain_dB / 10)
+    Gr = Gt
+    Pt_W = radar.eirp_W / Gt
+
+    numerator = (Pt_W * Gt * Gr * radar.wavelength_m ** 2 *
+                 platform_rcs_m2 * proc_gain)
+    denominator = ((4 * np.pi) ** 3 * KB * T0 * radar_bw_Hz *
+                   radar_nf * radar_snr_req * radar_loss)
+
+    radar_range_m = (numerator / denominator) ** 0.25
+
+    # Apply safety multiplier
+    required_range_m = radar_range_m * range_multiplier
+
+    return required_range_m
+
+
 def sensitivity_analysis(receiver: ReceiverParameters,
                          radar: RadarParameters,
                          param_name: str,

@@ -188,6 +188,7 @@ class PlatformConfig:
     width_m: float
     altitude_m: float
     speed_mps: float
+    rcs_m2: float = 2.0  # Platform RCS for dynamic detection range requirement
 
 
 @dataclass
@@ -418,7 +419,8 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
             length_m=float(geom_data.get('length_m', 2.0)),
             width_m=float(geom_data.get('width_m', 2.5)),
             altitude_m=float(plat_data.get('altitude_m', 5000)),
-            speed_mps=float(plat_data.get('speed_mps', 100))
+            speed_mps=float(plat_data.get('speed_mps', 100)),
+            rcs_m2=float(plat_data.get('rcs_m2', 2.0))
         )
 
     return SystemConfig(

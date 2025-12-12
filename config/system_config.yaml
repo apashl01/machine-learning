@@ -213,6 +213,9 @@ platform:
   altitude_m: 5000    # Default operating altitude MSL
   speed_mps: 100      # Platform speed (m/s)
 
+  # Radar cross section (for calculating threat radar detection range)
+  rcs_m2: 2.0         # Platform RCS (m²) - used for dynamic detection range requirement
+
 # =============================================================================
 # ANTENNA CONFIGURATION (Task 1.1: Consolidated from uav_config.yaml)
 # =============================================================================

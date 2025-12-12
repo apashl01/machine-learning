@@ -24,6 +24,8 @@ from esm_analysis.config import load_config, SystemConfig, ThreatLibrary
 from esm_analysis.core import SNRCalculator, ThreatCategorizer, DetectionModel
 from esm_analysis.scheduling import DwellScheduler
 from esm_analysis.visualization import ESMPlotter
+from esm_analysis.esm_detection import calculate_dynamic_detection_requirement
+from system_config import load_system_config
 
 
 def print_header(text: str):
@@ -62,6 +64,52 @@ def run_full_analysis(
         print("Analyzing all threats in library")
 
     print(f"Number of threats: {len(threats)}")
+
+    # Task 10: Calculate dynamic detection range requirements
+    # Load platform RCS from system_config
+    try:
+        sys_config = load_system_config()
+        platform_rcs = sys_config.platform.rcs_m2 if sys_config.platform else 2.0
+        print(f"\nCalculating dynamic detection range requirements (platform RCS: {platform_rcs} m²)...")
+        print(f"{'Threat':<30} {'Radar Range':>14} {'Required Range':>16} {'Multiplier':>12}")
+        print("-" * 80)
+
+        for threat in threats:
+            # Convert threat to RadarParameters for the calculation
+            from esm_analysis.esm_detection import RadarParameters
+            # Estimate radar bandwidth from pulse width: BW ≈ 1 / PW
+            bandwidth_mhz = 1.0 / threat.pulse_width_us  # MHz
+            # Calculate EIRP: Power (dBW) + Antenna Gain (dBi)
+            import numpy as np
+            power_dbw = 10 * np.log10(threat.peak_power_w)
+            eirp_dbw = power_dbw + threat.antenna_gain_dbi
+            radar_params = RadarParameters(
+                eirp_dBW=eirp_dbw,
+                freq_GHz=threat.frequency_hz / 1e9,
+                antenna_gain_dB=threat.antenna_gain_dbi,
+                bandwidth_MHz=bandwidth_mhz,
+                pulse_width_us=threat.pulse_width_us,
+                pri_us=threat.pri_us
+            )
+
+            # Calculate dynamic requirement (1.2x threat radar's range)
+            dynamic_range_m = calculate_dynamic_detection_requirement(
+                radar_params,
+                platform_rcs_m2=platform_rcs,
+                range_multiplier=1.2
+            )
+
+            # Update threat's required range if not already set
+            radar_range_m = dynamic_range_m / 1.2  # Back-calculate radar's range
+            if threat.required_detection_range_m is None:
+                threat.required_detection_range_m = dynamic_range_m
+
+            print(f"  {threat.name:<28} {radar_range_m/1000:>10.1f} km {dynamic_range_m/1000:>12.1f} km {'1.2x':>12}")
+
+    except ImportError:
+        print("\nNote: Could not load system config - using default detection ranges")
+
+    print(f"\nThreat summary:")
     for threat in threats:
         print(f"  - {threat.name} ({threat.category}): "
               f"{threat.frequency_hz/1e9:.1f} GHz, "

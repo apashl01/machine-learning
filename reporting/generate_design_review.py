@@ -266,6 +266,47 @@ def run_esm_analysis():
 
     # Run analysis on threats
     threats = list(threat_library)[:5]  # Analyze first 5 threats for demo
+
+    # Task 10: Calculate dynamic detection range requirements
+    try:
+        from system_config import load_system_config
+        from esm_analysis.esm_detection import calculate_dynamic_detection_requirement, RadarParameters
+
+        sys_config_full = load_system_config()
+        platform_rcs = sys_config_full.platform.rcs_m2 if sys_config_full.platform else 2.0
+
+        print(f"\nCalculating dynamic detection range requirements (platform RCS: {platform_rcs} m²)...")
+        for threat in threats:
+            # Convert threat to RadarParameters
+            # Estimate radar bandwidth from pulse width: BW ≈ 1 / PW
+            bandwidth_mhz = 1.0 / threat.pulse_width_us  # MHz
+            # Calculate EIRP: Power (dBW) + Antenna Gain (dBi)
+            power_dbw = 10 * np.log10(threat.peak_power_w)
+            eirp_dbw = power_dbw + threat.antenna_gain_dbi
+            radar_params = RadarParameters(
+                eirp_dBW=eirp_dbw,
+                freq_GHz=threat.frequency_hz / 1e9,
+                antenna_gain_dB=threat.antenna_gain_dbi,
+                bandwidth_MHz=bandwidth_mhz,
+                pulse_width_us=threat.pulse_width_us,
+                pri_us=threat.pri_us
+            )
+
+            # Calculate dynamic requirement (1.2x threat radar's range)
+            dynamic_range_m = calculate_dynamic_detection_requirement(
+                radar_params,
+                platform_rcs_m2=platform_rcs,
+                range_multiplier=1.2
+            )
+
+            # Update threat's required range if not already set, but always print
+            print(f"  {threat.name}: {dynamic_range_m/1000:.1f} km (1.2x radar range)")
+            if threat.required_detection_range_m is None:
+                threat.required_detection_range_m = dynamic_range_m
+
+    except Exception as e:
+        print(f"  Note: Could not calculate dynamic ranges: {e}")
+
     snr_calculator = SNRCalculator(system_config, verbose=False)
     categorizer = ThreatCategorizer(system_config, snr_calculator, verbose=False)
     categorization = categorizer.categorize_threats(threats)
