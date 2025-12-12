@@ -854,8 +854,81 @@ def get_antenna_config():
     plt.tight_layout()
     filepath = output_dir / "uav_coverage_analysis.png"
     fig.savefig(filepath, dpi=150, bbox_inches='tight')
-    plt.close(fig)
     print(f"\nCombined plot saved to: {filepath}")
+
+    # Task 7: Save antenna placement subplot separately
+    # Extract ax4 (antenna placement) as a standalone plot
+    fig_placement = plt.figure(figsize=(8, 8))
+    ax_placement = fig_placement.add_subplot(111)
+
+    # Re-create antenna placement plot
+    rx_ants = uav_config.rx_antennas if hasattr(uav_config, 'rx_antennas') and uav_config.rx_antennas else uav_config.antennas
+    tx_ants = uav_config.tx_antennas if hasattr(uav_config, 'tx_antennas') and uav_config.tx_antennas else []
+
+    # RX antennas by band
+    rx_mid = [a for a in rx_ants if hasattr(a, 'freq_band') and '2-18' in a.freq_band]
+    rx_low = [a for a in rx_ants if hasattr(a, 'freq_band') and '<2' in a.freq_band]
+    if not rx_mid and not rx_low:
+        rx_mid = rx_ants  # Legacy: all RX antennas
+
+    # TX antennas by band
+    tx_mid = [a for a in tx_ants if hasattr(a, 'freq_band') and '2-18' in a.freq_band]
+    tx_low = [a for a in tx_ants if hasattr(a, 'freq_band') and '<2' in a.freq_band]
+
+    # Plot RX antennas
+    if rx_mid:
+        pos = np.array([a.position for a in rx_mid])
+        ax_placement.scatter(pos[:, 1], pos[:, 0], s=200, c='blue', marker='^',
+                            label=f'RX 2-18 GHz ({len(rx_mid)})')
+    if rx_low:
+        pos = np.array([a.position for a in rx_low])
+        ax_placement.scatter(pos[:, 1], pos[:, 0], s=150, c='cyan', marker='^',
+                            label=f'RX <2 GHz ({len(rx_low)})')
+
+    # Plot TX antennas
+    if tx_mid:
+        pos = np.array([a.position for a in tx_mid])
+        ax_placement.scatter(pos[:, 1], pos[:, 0], s=200, c='red', marker='v',
+                            label=f'TX 2-18 GHz ({len(tx_mid)})')
+    if tx_low:
+        pos = np.array([a.position for a in tx_low])
+        ax_placement.scatter(pos[:, 1], pos[:, 0], s=150, c='orange', marker='v',
+                            label=f'TX <2 GHz ({len(tx_low)})')
+
+    # Draw orientation arrows
+    for ant in rx_ants:
+        az_rad = np.radians(ant.orientation[0])
+        dx = 0.2 * np.sin(az_rad)
+        dy = 0.2 * np.cos(az_rad)
+        ax_placement.arrow(ant.position[1], ant.position[0], dx, dy,
+                          head_width=0.05, head_length=0.03, fc='blue', ec='blue', alpha=0.6)
+    for ant in tx_ants:
+        az_rad = np.radians(ant.orientation[0])
+        dx = 0.25 * np.sin(az_rad)
+        dy = 0.25 * np.cos(az_rad)
+        ax_placement.arrow(ant.position[1], ant.position[0], dx, dy,
+                          head_width=0.06, head_length=0.04, fc='red', ec='red', alpha=0.7)
+
+    ax_placement.set_xlabel('Y (Right) [m]', fontsize=12)
+    ax_placement.set_ylabel('X (Forward) [m]', fontsize=12)
+    ax_placement.set_title('Antenna Placement on UAV (RX & TX)', fontsize=14, fontweight='bold')
+    ax_placement.grid(True, alpha=0.3)
+    ax_placement.axis('equal')
+    ax_placement.legend(loc='upper right', fontsize=10)
+
+    # UAV outline
+    rect_placement = plt.Rectangle((-uav_w, -uav_l), 2*uav_w, 2*uav_l,
+                                   fill=False, edgecolor='gray', linestyle='--', linewidth=2)
+    ax_placement.add_patch(rect_placement)
+    ax_placement.annotate('FWD', xy=(0, uav_l + 0.1), ha='center', fontsize=12, fontweight='bold')
+
+    fig_placement.tight_layout()
+    placement_path = output_dir / "antenna_placement.png"
+    fig_placement.savefig(placement_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_placement)
+    print(f"Antenna placement plot saved to: {placement_path}")
+
+    plt.close(fig)
 
     # Task 2.1: Generate individual band coverage plots
     def save_band_coverage_plot(antennas, title, filename, freq_label):
