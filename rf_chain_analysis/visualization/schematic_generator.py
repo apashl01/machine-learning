@@ -1,7 +1,8 @@
 """
-RF Chain Schematic Generator using schemdraw
+RF Chain System Architecture Generator using schemdraw
 
-Task 1: Generates visual schematics of RF chain archetypes from config/rf_chains.yaml.
+Generates a single comprehensive diagram showing the complete RF system
+architecture with all RX and TX paths connected to a central transceiver unit.
 """
 
 from pathlib import Path
@@ -17,169 +18,264 @@ except ImportError:
     print("Warning: schemdraw not installed. Install with: pip install schemdraw")
 
 
-# Component type to schemdraw element mapping
-COMPONENT_MAP = {
-    'antenna': 'Antenna',
-    'amplifier': 'Opamp',
-    'attenuator': 'Resistor',
-    'filter': 'RBox',
-    'switch': 'Switch',
-    'cable': 'Line',
-    'coax': 'Line',
-    'bandpass': 'RBox',
-    'lowpass': 'RBox',
-    'highpass': 'RBox',
-}
-
-
-def load_chains_config(config_path: Path = None) -> Dict:
-    """Load RF chains configuration from YAML."""
+def load_system_config(config_path: Path = None) -> Dict:
+    """Load system configuration containing rx_paths and tx_paths with num_paths."""
     if config_path is None:
-        config_path = Path(__file__).parent.parent.parent / "config" / "rf_chains.yaml"
+        config_path = Path(__file__).parent.parent.parent / "config" / "system_config.yaml"
 
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
 
-def get_component_details(comp_ref: str, components_library: Dict) -> tuple:
-    """Get component name and type from library."""
-    if comp_ref in components_library:
-        comp_data = components_library[comp_ref]
-        return comp_data.get('name', comp_ref), comp_data.get('type', 'unknown')
-    return comp_ref, 'unknown'
-
-
-def create_schematic_element(comp_name: str, comp_type: str):
-    """Create appropriate schemdraw element for component type."""
+def create_component_element(comp_name: str, comp_type: str, scale: float = 1.0):
+    """Create a compact schemdraw element for a component."""
     if not SCHEMDRAW_AVAILABLE:
         return None
 
-    # Map component type to schemdraw element
-    if comp_type in ['antenna', 'spiral', 'horn', 'omni']:
-        # Use a simple antenna symbol (triangle)
-        return elm.Antenna()
+    # Map component type to schemdraw element with compact sizing
+    if comp_type in ['antenna', 'spiral', 'horn', 'omni', 'dipole']:
+        return elm.Antenna().scale(scale * 0.4)
     elif comp_type == 'amplifier':
-        return elm.Opamp().label(comp_name)
+        return elm.Opamp().scale(scale * 0.3).label(comp_name, fontsize=6)
     elif comp_type in ['attenuator', 'atten']:
-        return elm.Resistor().label(comp_name)
+        return elm.Resistor().scale(scale * 0.3).label(comp_name, fontsize=6)
     elif comp_type in ['filter', 'bandpass', 'lowpass', 'highpass']:
-        return elm.RBox(w=1.5, h=1).label(comp_name)
+        return elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
     elif comp_type == 'switch':
-        return elm.Switch().label(comp_name)
+        return elm.Switch().scale(scale * 0.3)
     elif comp_type in ['cable', 'coax']:
-        # Use a line with label
-        return elm.Line().label(comp_name, loc='top')
+        return elm.Line().length(0.3)
     else:
-        # Default: labeled box
-        return elm.RBox(w=1.5, h=1).label(comp_name)
+        # Default: compact labeled box
+        return elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
 
 
-def generate_chain_schematic(archetype_name: str, archetype_data: Dict,
-                            components_library: Dict, output_dir: Path):
+def draw_rx_path(d, components: List[Dict], y_offset: float, freq_label: str, scale: float = 1.0):
     """
-    Generate schematic diagram for a single RF chain archetype.
+    Draw a single RX path horizontally from antenna (left) to transceiver (right).
 
-    Args:
-        archetype_name: Name of the archetype (e.g., 'rx_standard')
-        archetype_data: Archetype configuration dict
-        components_library: Component library dict
-        output_dir: Directory to save schematic
+    Returns the ending position for connection to transceiver.
+    """
+    # Start position for this path
+    start_x = 0
+    current_x = start_x
+
+    # Draw frequency label near antenna
+    d += elm.Label().at((current_x - 0.5, y_offset)).label(freq_label, fontsize=7)
+
+    # Draw components left to right
+    for i, comp in enumerate(components):
+        comp_name = comp.get('name', 'Unknown')
+        comp_type = comp.get('type', 'component')
+
+        try:
+            if i == 0:  # Antenna
+                elem = elm.Antenna().scale(scale * 0.5).at((current_x, y_offset))
+                d += elem
+                current_x += 0.8
+            else:
+                # Add connecting line
+                d += elm.Line().at((current_x, y_offset)).right(0.4)
+                current_x += 0.4
+
+                # Add component (compact)
+                elem = create_component_element(comp_name, comp_type, scale)
+                if elem:
+                    d += elem.at((current_x, y_offset))
+                    current_x += 0.6
+        except Exception as e:
+            # Fallback: simple box
+            d += elm.RBox(w=0.4, h=0.3).at((current_x, y_offset)).label(comp_name[:8], fontsize=5)
+            current_x += 0.5
+
+    # Return endpoint for connection to transceiver
+    return (current_x, y_offset)
+
+
+def draw_tx_path(d, components: List[Dict], y_offset: float, freq_label: str, start_x: float, scale: float = 1.0):
+    """
+    Draw a single TX path horizontally from transceiver (left) to antenna (right).
+    """
+    current_x = start_x
+
+    # Draw components left to right (transceiver -> antenna)
+    for i, comp in enumerate(components):
+        comp_name = comp.get('name', 'Unknown')
+        comp_type = comp.get('type', 'component')
+
+        try:
+            # Add connecting line first
+            if i > 0:
+                d += elm.Line().at((current_x, y_offset)).right(0.4)
+                current_x += 0.4
+
+            # Add component
+            if comp_type in ['antenna', 'spiral', 'horn', 'omni']:
+                # Antenna at the end
+                elem = elm.Antenna().scale(scale * 0.5).at((current_x, y_offset))
+                d += elem
+                # Add frequency label near antenna
+                d += elm.Label().at((current_x + 0.8, y_offset)).label(freq_label, fontsize=7)
+                current_x += 0.8
+            else:
+                elem = create_component_element(comp_name, comp_type, scale)
+                if elem:
+                    d += elem.at((current_x, y_offset))
+                current_x += 0.6
+        except Exception as e:
+            # Fallback: simple box
+            d += elm.RBox(w=0.4, h=0.3).at((current_x, y_offset)).label(comp_name[:8], fontsize=5)
+            current_x += 0.5
+
+
+def generate_system_architecture(output_dir: Path = None):
+    """
+    Generate a single comprehensive system architecture diagram showing all
+    RX and TX paths connected to a central transceiver unit.
     """
     if not SCHEMDRAW_AVAILABLE:
-        print(f"  Skipping {archetype_name} - schemdraw not available")
-        return
-
-    name = archetype_data.get('name', archetype_name)
-    description = archetype_data.get('description', '')
-    chain_type = archetype_data.get('type', 'unknown')
-    freq_range = archetype_data.get('freq_range_ghz', [0, 0])
-    components_list = archetype_data.get('components', [])
-
-    # Sort components by order
-    components_list = sorted(components_list, key=lambda x: x.get('order', 999))
-
-    # Create drawing
-    with schemdraw.Drawing(show=False) as d:
-        d.config(fontsize=10, font='sans-serif')
-
-        # Add title
-        title_text = f"{name}\n{description}\n{freq_range[0]:.1f}-{freq_range[1]:.1f} GHz"
-
-        # Draw components in sequence from left to right
-        for i, comp_spec in enumerate(components_list):
-            comp_ref = comp_spec.get('ref', f'comp_{i}')
-            comp_name, comp_type = get_component_details(comp_ref, components_library)
-
-            # Create and add the element
-            try:
-                if i == 0:
-                    # First element starts the chain
-                    elem = create_schematic_element(comp_name, comp_type)
-                    if elem:
-                        d += elem
-                else:
-                    # Subsequent elements connect with a line and then the component
-                    d += elm.Line().right(0.5)
-                    elem = create_schematic_element(comp_name, comp_type)
-                    if elem:
-                        d += elem
-            except Exception as e:
-                print(f"    Warning: Could not add {comp_name}: {e}")
-                # Add a simple box as fallback
-                d += elm.Line().right(0.5)
-                d += elm.RBox(w=1.5, h=1).label(comp_name)
-
-        # Add title at top
-        # Note: schemdraw doesn't have a built-in title, so we'll add it as text annotation
-
-        # Save schematic
-        output_path = output_dir / f"schematic_{archetype_name}.png"
-        d.save(str(output_path), dpi=150)
-        print(f"  Schematic saved: {output_path}")
-
-
-def generate_all_schematics(output_dir: Path = None):
-    """
-    Generate schematics for all chain archetypes in config/rf_chains.yaml.
-
-    Args:
-        output_dir: Directory to save schematics. If None, uses rf_chain_analysis/output/
-    """
-    if not SCHEMDRAW_AVAILABLE:
-        print("Cannot generate schematics - schemdraw not installed")
-        print("Install with: pip install schemdraw")
+        print("schemdraw not available - skipping system architecture generation")
         return
 
     if output_dir is None:
         output_dir = Path(__file__).parent.parent / "output"
 
-    output_dir.mkdir(exist_ok=True, parents=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load configuration
-    config = load_chains_config()
-    components_library = config.get('components', {})
-    archetypes = config.get('chain_archetypes', {})
+    print("\nGenerating System RF Architecture Diagram...")
 
-    print(f"\nGenerating RF Chain Schematics...")
-    print(f"Found {len(archetypes)} archetypes")
+    # Load system configuration
+    config = load_system_config()
+    rf_chains = config.get('rf_chains', {})
+    rx_paths = rf_chains.get('rx_paths', {})
+    tx_paths = rf_chains.get('tx_paths', {})
 
-    # Generate schematic for each archetype
-    for archetype_name, archetype_data in archetypes.items():
-        print(f"\nGenerating {archetype_name}...")
-        try:
-            generate_chain_schematic(
-                archetype_name,
-                archetype_data,
-                components_library,
-                output_dir
-            )
-        except Exception as e:
-            print(f"  Error generating {archetype_name}: {e}")
-            import traceback
-            traceback.print_exc()
+    # Create drawing with compact scaling
+    d = schemdraw.Drawing(unit=0.8, fontsize=8)
 
-    print(f"\nSchematic generation complete!")
-    print(f"Schematics saved to: {output_dir}")
+    # =========================================================================
+    # Calculate layout dimensions
+    # =========================================================================
+
+    # Count total physical paths
+    total_rx_paths = sum(path.get('num_paths', 1) for path in rx_paths.values())
+    total_tx_paths = sum(path.get('num_paths', 1) for path in tx_paths.values())
+
+    print(f"  Total RX paths: {total_rx_paths}")
+    print(f"  Total TX paths: {total_tx_paths}")
+
+    # Vertical spacing between paths
+    path_spacing = 1.2
+
+    # Calculate total height needed
+    rx_height = total_rx_paths * path_spacing
+    tx_height = total_tx_paths * path_spacing
+    total_height = max(rx_height, tx_height)
+
+    # Transceiver box dimensions and position
+    transceiver_width = 3.0
+    transceiver_height = total_height * 0.6
+    transceiver_x = 6.0  # Center position
+    transceiver_y = total_height / 2
+
+    # =========================================================================
+    # Draw Central Transceiver/Processor
+    # =========================================================================
+
+    d += elm.RBox(w=transceiver_width, h=transceiver_height).at(
+        (transceiver_x - transceiver_width/2, transceiver_y - transceiver_height/2)
+    ).fill('#e0e0e0').label('Transceiver /\nProcessor', fontsize=10)
+
+    # =========================================================================
+    # Draw RX Paths (Left side -> Transceiver)
+    # =========================================================================
+
+    current_y = total_height - 0.5  # Start from top
+    rx_connection_points = []
+
+    for path_name, path_config in rx_paths.items():
+        num_paths = path_config.get('num_paths', 1)
+        freq_range = path_config.get('freq_range_ghz', [0, 0])
+        freq_label = f"{freq_range[0]:.1f}-{freq_range[1]:.1f} GHz"
+        components = path_config.get('components', [])
+
+        print(f"  Drawing {num_paths}x {path_name} ({freq_label})")
+
+        # Draw each physical instance of this path type
+        for i in range(num_paths):
+            endpoint = draw_rx_path(d, components, current_y, freq_label, scale=1.0)
+            rx_connection_points.append((endpoint, current_y))
+
+            # Connect endpoint to transceiver
+            transceiver_left = transceiver_x - transceiver_width/2
+            d += elm.Line().at(endpoint).to((transceiver_left, current_y))
+
+            current_y -= path_spacing
+
+    # =========================================================================
+    # Draw TX Paths (Transceiver -> Right side)
+    # =========================================================================
+
+    current_y = total_height - 0.5  # Start from top
+
+    for path_name, path_config in tx_paths.items():
+        num_paths = path_config.get('num_paths', 1)
+        freq_range = path_config.get('freq_range_ghz', [0, 0])
+        freq_label = f"{freq_range[0]:.1f}-{freq_range[1]:.1f} GHz"
+        components = path_config.get('components', [])
+
+        print(f"  Drawing {num_paths}x {path_name} ({freq_label})")
+
+        # Draw each physical instance of this path type
+        for i in range(num_paths):
+            transceiver_right = transceiver_x + transceiver_width/2
+
+            # Connection from transceiver
+            tx_start_x = transceiver_right + 0.5
+            d += elm.Line().at((transceiver_right, current_y)).to((tx_start_x, current_y))
+
+            # Draw TX path components
+            draw_tx_path(d, components, current_y, freq_label, tx_start_x, scale=1.0)
+
+            current_y -= path_spacing
+
+    # =========================================================================
+    # Add Title
+    # =========================================================================
+
+    title_y = total_height + 1.0
+    d += elm.Label().at((transceiver_x, title_y)).label(
+        'RF System Architecture', fontsize=14
+    )
+
+    # =========================================================================
+    # Save diagram
+    # =========================================================================
+
+    output_path = output_dir / "system_architecture.svg"
+    d.save(str(output_path))
+    print(f"  System architecture diagram saved to: {output_path}")
+
+    return output_path
+
+
+def generate_all_schematics(output_dir: Path = None):
+    """
+    Main entry point: Generate system architecture diagram.
+
+    This replaces the previous approach of generating individual chain schematics.
+    """
+    print("\n" + "=" * 70)
+    print(" RF SYSTEM ARCHITECTURE GENERATION")
+    print("=" * 70)
+
+    try:
+        generate_system_architecture(output_dir)
+        print("\nSystem architecture generation complete!")
+    except Exception as e:
+        print(f"\nError generating system architecture: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

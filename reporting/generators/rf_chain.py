@@ -142,17 +142,12 @@ def add_rf_chain_slides(gen: DesignReviewGenerator,
                 image_width=10.0
             )
 
-        # RF Chain Schematics
-        # Scan for schematic_*.png files and add them to slides
-        schematic_files = sorted(output_path.glob("schematic_*.png"))
-        for schematic_file in schematic_files:
-            # Extract archetype name from filename (e.g., "schematic_rx_standard.png" -> "rx_standard")
-            archetype_name = schematic_file.stem.replace("schematic_", "")
-            # Format the archetype name for display (e.g., "rx_standard" -> "RX Standard")
-            display_name = archetype_name.replace("_", " ").title()
-
+        # System RF Architecture
+        # Display single comprehensive architecture diagram
+        arch_diagram = output_path / "system_architecture.svg"
+        if arch_diagram.exists():
             gen.add_content_slide(
-                f"RF Chain Schematic: {display_name}",
-                image_path=str(schematic_file),
+                "System RF Architecture",
+                image_path=str(arch_diagram),
                 image_width=10.0
             )
