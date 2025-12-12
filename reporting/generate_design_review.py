@@ -33,7 +33,11 @@ from reporting.generators import (
     add_antenna_coverage_slides,
     add_ekf_geolocation_slides,
     add_summary_slide,
-    add_compliance_slides
+    add_compliance_slides,
+    add_conops_slide,
+    add_design_goals_slide,
+    add_technical_risks_slide,
+    add_swap_c_slide
 )
 from reporting.generators.jamming import add_jamming_slides
 
@@ -1131,6 +1135,10 @@ def generate_powerpoint(
         }
     )
 
+    # Overview & Context placeholders (Task 3)
+    add_conops_slide(gen)
+    add_design_goals_slide(gen)
+
     # Add analysis sections in SDR-appropriate order
     base_dir = Path(__file__).parent.parent
 
@@ -1185,6 +1193,10 @@ def generate_powerpoint(
 
     # Add compliance slides
     add_compliance_slides(gen, compliance_result, compliance_rows)
+
+    # Summary & Path Forward placeholders (Task 3)
+    add_technical_risks_slide(gen)
+    add_swap_c_slide(gen)
 
     # Summary - Task 10: Use compliance dashboard instead of hardcoded findings
     add_summary_slide(

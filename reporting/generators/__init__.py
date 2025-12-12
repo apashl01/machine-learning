@@ -11,6 +11,12 @@ from .ekf_geolocation import add_ekf_geolocation_slides
 from .esm import add_esm_slides, add_measurement_accuracy_slides, add_spurious_analysis_slides
 from .compliance import add_compliance_slides
 from .jamming import add_jamming_slides
+from .placeholders import (
+    add_conops_slide,
+    add_design_goals_slide,
+    add_technical_risks_slide,
+    add_swap_c_slide
+)
 
 __all__ = [
     'add_title_slide',
@@ -25,4 +31,8 @@ __all__ = [
     'add_spurious_analysis_slides',
     'add_compliance_slides',
     'add_jamming_slides',
+    'add_conops_slide',
+    'add_design_goals_slide',
+    'add_technical_risks_slide',
+    'add_swap_c_slide',
 ]
