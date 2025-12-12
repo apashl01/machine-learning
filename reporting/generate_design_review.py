@@ -648,6 +648,119 @@ def get_adc_config():
     print(f"  Average ENOB: {avg_enob:.1f}")
     print(f"  Average SFDR: {avg_sfdr:.1f} dB")
 
+    # Task 2.3: Generate ADC performance plots
+    print("\nGenerating ADC performance plots...")
+    from pathlib import Path
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    output_dir = Path(__file__).parent.parent / "adc_analysis" / "output"
+    output_dir.mkdir(exist_ok=True)
+
+    # Extract frequency points and performance metrics from bands
+    freq_points = []
+    sfdr_values = []
+    enob_values = []
+    snr_values = []
+
+    for band_name, band in adc.bands.items():
+        # Use center frequency of each band
+        freq_center = (band.freq_min_ghz + band.freq_max_ghz) / 2
+        freq_points.append(freq_center)
+        sfdr_values.append(band.sfdr_db)
+        enob_values.append(band.enob)
+        snr_values.append(6.02 * band.enob + 1.76)
+
+    freq_points = np.array(freq_points)
+    sfdr_values = np.array(sfdr_values)
+    enob_values = np.array(enob_values)
+    snr_values = np.array(snr_values)
+
+    # Sort by frequency
+    sort_idx = np.argsort(freq_points)
+    freq_points = freq_points[sort_idx]
+    sfdr_values = sfdr_values[sort_idx]
+    enob_values = enob_values[sort_idx]
+    snr_values = snr_values[sort_idx]
+
+    # Plot 1: SFDR vs Frequency
+    fig_sfdr, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(freq_points, sfdr_values, 'o-', linewidth=2, markersize=10, color='steelblue', label='SFDR')
+    ax.set_xlabel('Frequency (GHz)', fontsize=12)
+    ax.set_ylabel('SFDR (dB)', fontsize=12)
+    ax.set_title(f'{adc.model} - Spurious-Free Dynamic Range vs Frequency', fontsize=13, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=11)
+
+    # Add value annotations
+    for i, (f, s) in enumerate(zip(freq_points, sfdr_values)):
+        ax.annotate(f'{s:.0f} dB', xy=(f, s), xytext=(0, 10),
+                   textcoords='offset points', ha='center', fontsize=9)
+
+    fig_sfdr.tight_layout()
+    sfdr_path = output_dir / "adc_sfdr.png"
+    fig_sfdr.savefig(sfdr_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_sfdr)
+    print(f"  SFDR plot saved to: {sfdr_path}")
+
+    # Plot 2: ENOB vs Frequency
+    fig_enob, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(freq_points, enob_values, 's-', linewidth=2, markersize=10, color='coral', label='ENOB')
+    ax.axhline(y=adc.resolution_bits, color='gray', linestyle='--', linewidth=1.5,
+               label=f'Nominal Resolution ({adc.resolution_bits} bits)')
+    ax.set_xlabel('Frequency (GHz)', fontsize=12)
+    ax.set_ylabel('Effective Number of Bits (ENOB)', fontsize=12)
+    ax.set_title(f'{adc.model} - ENOB vs Frequency', fontsize=13, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=11)
+    ax.set_ylim([0, adc.resolution_bits + 1])
+
+    # Add value annotations
+    for i, (f, e) in enumerate(zip(freq_points, enob_values)):
+        ax.annotate(f'{e:.1f}', xy=(f, e), xytext=(0, 10),
+                   textcoords='offset points', ha='center', fontsize=9)
+
+    fig_enob.tight_layout()
+    enob_path = output_dir / "adc_enob.png"
+    fig_enob.savefig(enob_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_enob)
+    print(f"  ENOB plot saved to: {enob_path}")
+
+    # Plot 3: Comparison plot (SFDR and ENOB together)
+    fig_comp, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+
+    # SFDR subplot
+    ax1.plot(freq_points, sfdr_values, 'o-', linewidth=2, markersize=10, color='steelblue', label='SFDR')
+    ax1.set_ylabel('SFDR (dB)', fontsize=12, color='steelblue')
+    ax1.set_title(f'{adc.model} - Performance Comparison', fontsize=13, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.tick_params(axis='y', labelcolor='steelblue')
+    for i, (f, s) in enumerate(zip(freq_points, sfdr_values)):
+        ax1.annotate(f'{s:.0f}', xy=(f, s), xytext=(0, 5),
+                    textcoords='offset points', ha='center', fontsize=8, color='steelblue')
+
+    # ENOB subplot
+    ax2.plot(freq_points, enob_values, 's-', linewidth=2, markersize=10, color='coral', label='ENOB')
+    ax2.axhline(y=adc.resolution_bits, color='gray', linestyle='--', linewidth=1.5,
+                label=f'Nominal ({adc.resolution_bits} bits)')
+    ax2.set_xlabel('Frequency (GHz)', fontsize=12)
+    ax2.set_ylabel('ENOB (bits)', fontsize=12, color='coral')
+    ax2.grid(True, alpha=0.3)
+    ax2.tick_params(axis='y', labelcolor='coral')
+    ax2.legend(fontsize=10)
+    ax2.set_ylim([0, adc.resolution_bits + 1])
+    for i, (f, e) in enumerate(zip(freq_points, enob_values)):
+        ax2.annotate(f'{e:.1f}', xy=(f, e), xytext=(0, 5),
+                    textcoords='offset points', ha='center', fontsize=8, color='coral')
+
+    fig_comp.tight_layout()
+    comp_path = output_dir / "adc_comparison.png"
+    fig_comp.savefig(comp_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_comp)
+    print(f"  Comparison plot saved to: {comp_path}")
+
     return adc_config, adc_results
 
 
