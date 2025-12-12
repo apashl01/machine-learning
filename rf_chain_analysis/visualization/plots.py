@@ -9,7 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from ..core.analyzer import CascadeResult, FrequencyAnalysis, PowerPoint
+# Note: The plot functions in this module are not currently used.
+# RF chain plots are generated manually in generate_design_review.py
 
 
 # =============================================================================
