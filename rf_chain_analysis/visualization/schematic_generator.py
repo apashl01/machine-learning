@@ -143,82 +143,121 @@ def create_component_element(comp_name: str, comp_type: str, scale: float = 1.0)
         return elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
 
 
-def draw_rx_path(d, components: List[Dict], y_offset: float, freq_label: str, scale: float = 1.0):
+def draw_rx_path(d, components: List[Dict], y_offset: float, freq_label: str, start_x: float = 0, scale: float = 1.0):
     """
     Draw a single RX path horizontally from antenna (left) to transceiver (right).
 
-    Returns the ending position for connection to transceiver.
+    Returns the ending X position for connection to transceiver.
     """
-    # Start position for this path
-    start_x = 0
-    current_x = start_x
-
     # Draw frequency label near antenna
-    d += elm.Label().at((current_x - 0.5, y_offset)).label(freq_label, fontsize=7)
+    d += elm.Label().at((start_x - 0.5, y_offset)).label(freq_label, fontsize=7)
 
-    # Draw components left to right
+    # Start the path at the specified position
+    current_pos = (start_x, y_offset)
+
+    # Draw components left to right using natural chaining
     for i, comp in enumerate(components):
         comp_name = comp.get('name', 'Unknown')
         comp_type = comp.get('type', 'component')
 
         try:
-            if i == 0:  # Antenna
-                elem = elm.Antenna().scale(scale * 0.5).at((current_x, y_offset))
-                d += elem
-                current_x += 0.8
+            if i == 0:  # Antenna - first element
+                d += elm.Antenna().scale(scale * 0.5).at(current_pos)
             else:
-                # Add connecting line
-                d += elm.Line().at((current_x, y_offset)).right(0.4)
-                current_x += 0.4
+                # Add connecting line, then component
+                d += elm.Line().right(0.4)
 
-                # Add component (compact)
-                elem = create_component_element(comp_name, comp_type, scale)
-                if elem:
-                    d += elem.at((current_x, y_offset))
-                    current_x += 0.6
+                # Add component element
+                if comp_type in ['antenna', 'spiral', 'horn', 'omni', 'dipole']:
+                    d += elm.Antenna().scale(scale * 0.4)
+                elif comp_type == 'amplifier':
+                    d += elm.Opamp().scale(scale * 0.3).label(comp_name, fontsize=6)
+                elif comp_type in ['attenuator', 'atten']:
+                    d += elm.Resistor().scale(scale * 0.3).label(comp_name, fontsize=6)
+                elif comp_type in ['filter', 'bandpass', 'lowpass', 'highpass']:
+                    d += elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
+                elif comp_type == 'switch':
+                    d += elm.Switch().scale(scale * 0.3)
+                elif comp_type in ['cable', 'coax']:
+                    d += elm.Line().length(0.3)
+                else:
+                    d += elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
         except Exception as e:
             # Fallback: simple box
-            d += elm.RBox(w=0.4, h=0.3).at((current_x, y_offset)).label(comp_name[:8], fontsize=5)
-            current_x += 0.5
+            if i == 0:
+                d += elm.RBox(w=0.4, h=0.3).at(current_pos).label(comp_name[:8], fontsize=5)
+            else:
+                d += elm.Line().right(0.2)
+                d += elm.RBox(w=0.4, h=0.3).label(comp_name[:8], fontsize=5)
 
-    # Return endpoint for connection to transceiver
-    return (current_x, y_offset)
+    # Return the current drawing position (endpoint)
+    # Schemdraw tracks this internally, but we need to calculate it for connections
+    # Estimate: antenna (0.8) + (n-1) components * (0.4 line + 0.6 component avg)
+    estimated_end_x = start_x + 0.8 + (len(components) - 1) * 1.0
+    return estimated_end_x
 
 
 def draw_tx_path(d, components: List[Dict], y_offset: float, freq_label: str, start_x: float, scale: float = 1.0):
     """
     Draw a single TX path horizontally from transceiver (left) to antenna (right).
     """
-    current_x = start_x
+    # Start the TX path from the transceiver edge
+    current_pos = (start_x, y_offset)
 
-    # Draw components left to right (transceiver -> antenna)
+    # Draw components left to right using natural chaining
     for i, comp in enumerate(components):
         comp_name = comp.get('name', 'Unknown')
         comp_type = comp.get('type', 'component')
 
         try:
-            # Add connecting line first
-            if i > 0:
-                d += elm.Line().at((current_x, y_offset)).right(0.4)
-                current_x += 0.4
-
-            # Add component
-            if comp_type in ['antenna', 'spiral', 'horn', 'omni']:
-                # Antenna at the end
-                elem = elm.Antenna().scale(scale * 0.5).at((current_x, y_offset))
-                d += elem
-                # Add frequency label near antenna
-                d += elm.Label().at((current_x + 0.8, y_offset)).label(freq_label, fontsize=7)
-                current_x += 0.8
+            if i == 0:  # First component after transceiver
+                # Check if it's an antenna (last in chain)
+                if comp_type in ['antenna', 'spiral', 'horn', 'omni']:
+                    d += elm.Antenna().scale(scale * 0.5).at(current_pos)
+                    # Add frequency label
+                    d += elm.Label().at((start_x + 0.8, y_offset)).label(freq_label, fontsize=7)
+                else:
+                    # Regular component
+                    if comp_type == 'amplifier':
+                        d += elm.Opamp().scale(scale * 0.3).label(comp_name, fontsize=6).at(current_pos)
+                    elif comp_type in ['attenuator', 'atten']:
+                        d += elm.Resistor().scale(scale * 0.3).label(comp_name, fontsize=6).at(current_pos)
+                    elif comp_type in ['filter', 'bandpass', 'lowpass', 'highpass']:
+                        d += elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6).at(current_pos)
+                    elif comp_type == 'switch':
+                        d += elm.Switch().scale(scale * 0.3).at(current_pos)
+                    elif comp_type in ['cable', 'coax']:
+                        d += elm.Line().length(0.3).at(current_pos)
+                    else:
+                        d += elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6).at(current_pos)
             else:
-                elem = create_component_element(comp_name, comp_type, scale)
-                if elem:
-                    d += elem.at((current_x, y_offset))
-                current_x += 0.6
+                # Subsequent components - use chaining
+                d += elm.Line().right(0.4)
+
+                if comp_type in ['antenna', 'spiral', 'horn', 'omni']:
+                    d += elm.Antenna().scale(scale * 0.5)
+                    # Add frequency label near antenna (estimate position)
+                    label_x = start_x + (i + 1) * 1.0 + 0.8
+                    d += elm.Label().at((label_x, y_offset)).label(freq_label, fontsize=7)
+                elif comp_type == 'amplifier':
+                    d += elm.Opamp().scale(scale * 0.3).label(comp_name, fontsize=6)
+                elif comp_type in ['attenuator', 'atten']:
+                    d += elm.Resistor().scale(scale * 0.3).label(comp_name, fontsize=6)
+                elif comp_type in ['filter', 'bandpass', 'lowpass', 'highpass']:
+                    d += elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
+                elif comp_type == 'switch':
+                    d += elm.Switch().scale(scale * 0.3)
+                elif comp_type in ['cable', 'coax']:
+                    d += elm.Line().length(0.3)
+                else:
+                    d += elm.RBox(w=0.6, h=0.4).label(comp_name, fontsize=6)
         except Exception as e:
             # Fallback: simple box
-            d += elm.RBox(w=0.4, h=0.3).at((current_x, y_offset)).label(comp_name[:8], fontsize=5)
-            current_x += 0.5
+            if i == 0:
+                d += elm.RBox(w=0.4, h=0.3).at(current_pos).label(comp_name[:8], fontsize=5)
+            else:
+                d += elm.Line().right(0.2)
+                d += elm.RBox(w=0.4, h=0.3).label(comp_name[:8], fontsize=5)
 
 
 def generate_system_architecture(output_dir: Path = None):
@@ -260,30 +299,35 @@ def generate_system_architecture(output_dir: Path = None):
     # Vertical spacing between paths
     path_spacing = 1.2
 
-    # Calculate total height needed
+    # Calculate total height needed and track path positions
     rx_height = total_rx_paths * path_spacing
     tx_height = total_tx_paths * path_spacing
     total_height = max(rx_height, tx_height)
+    max_paths = max(total_rx_paths, total_tx_paths)
 
-    # Transceiver box dimensions and position
+    # Calculate actual Y positions for paths
+    start_y = total_height - 0.5  # Top position
+    end_y = start_y - (max_paths - 1) * path_spacing  # Bottom position
+
+    # Transceiver box dimensions and position (dynamically sized)
     transceiver_width = 3.0
-    transceiver_height = total_height * 0.6
+    transceiver_height = (start_y - end_y) + 1.5  # Height spans all paths + margin
     transceiver_x = 6.0  # Center position
-    transceiver_y = total_height / 2
+    transceiver_y_center = (start_y + end_y) / 2  # Center vertically between paths
 
     # =========================================================================
     # Draw Central Transceiver/Processor
     # =========================================================================
 
     d += elm.RBox(w=transceiver_width, h=transceiver_height).at(
-        (transceiver_x - transceiver_width/2, transceiver_y - transceiver_height/2)
+        (transceiver_x - transceiver_width/2, transceiver_y_center - transceiver_height/2)
     ).fill('#e0e0e0').label('Transceiver /\nProcessor', fontsize=10)
 
     # =========================================================================
     # Draw RX Paths (Left side -> Transceiver)
     # =========================================================================
 
-    current_y = total_height - 0.5  # Start from top
+    current_y = start_y  # Start from top
     rx_connection_points = []
 
     for path_name, path_config in rx_paths.items():
@@ -296,12 +340,12 @@ def generate_system_architecture(output_dir: Path = None):
 
         # Draw each physical instance of this path type
         for i in range(num_paths):
-            endpoint = draw_rx_path(d, components, current_y, freq_label, scale=1.0)
-            rx_connection_points.append((endpoint, current_y))
+            endpoint_x = draw_rx_path(d, components, current_y, freq_label, scale=1.0)
+            rx_connection_points.append((endpoint_x, current_y))
 
             # Connect endpoint to transceiver
             transceiver_left = transceiver_x - transceiver_width/2
-            d += elm.Line().at(endpoint).to((transceiver_left, current_y))
+            d += elm.Line().at((endpoint_x, current_y)).to((transceiver_left, current_y))
 
             current_y -= path_spacing
 
@@ -309,7 +353,7 @@ def generate_system_architecture(output_dir: Path = None):
     # Draw TX Paths (Transceiver -> Right side)
     # =========================================================================
 
-    current_y = total_height - 0.5  # Start from top
+    current_y = start_y  # Start from top (same as RX paths)
 
     for path_name, path_config in tx_paths.items():
         num_paths = path_config.get('num_paths', 1)
