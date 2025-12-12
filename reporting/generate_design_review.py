@@ -497,7 +497,86 @@ def get_rf_chain_config():
     filepath = output_dir / "rf_chain_analysis.png"
     fig.savefig(filepath, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"\nPlot saved to: {filepath}")
+    print(f"\nCombined plot saved to: {filepath}")
+
+    # Task 2.2: Generate individual power tracking and cascade plots
+    print("\nGenerating detailed RF chain plots...")
+
+    # Get primary RX path for detailed analysis
+    primary_rx = next((p for p in rx_paths_list if '2-18' in p['name']), rx_paths_list[0] if rx_paths_list else None)
+
+    if primary_rx and primary_rx['components']:
+        from rf_chain_analysis import load_from_system_config as load_rf_chain, analyze_rf_chain
+        from rf_chain_analysis.visualization.plots import plot_power_tracking, plot_cascade_breakdown
+
+        try:
+            # Load RF chain configuration from system config
+            chain_config = load_rf_chain(chain_type='receive')
+
+            # Analyze the chain
+            print(f"  Analyzing {primary_rx['name']}...")
+            results = analyze_rf_chain(chain_config)
+
+            # Get mid-frequency cascade result for detailed plots
+            mid_freq_result = results.mid_freq_summary
+
+            # Generate power tracking plot
+            if results.has_power_tracking and results.power_tracking:
+                print("  Generating power tracking plot...")
+                fig_power = plot_power_tracking(
+                    results.power_tracking,
+                    input_power_dbm=-60.0,  # Typical input signal
+                    chain_name=primary_rx['name']
+                )
+                power_path = output_dir / "rf_chain_power.png"
+                fig_power.savefig(power_path, dpi=150, bbox_inches='tight')
+                plt.close(fig_power)
+                print(f"    Power tracking plot saved to: {power_path}")
+            else:
+                # Generate power tracking plot manually
+                print("  Generating power tracking plot (manual)...")
+                from rf_chain_analysis.core.analyzer import PowerPoint
+
+                # Build power points from components
+                input_power = -60.0
+                power_points = []
+                current_power = input_power
+
+                for comp in primary_rx['components']:
+                    comp_name = comp.get('name', 'Unknown')
+                    gain_db = comp.get('gain_db', 0)
+                    output_power = current_power + gain_db
+
+                    power_point = PowerPoint(
+                        component_name=comp_name,
+                        input_power_dbm=current_power,
+                        output_power_dbm=output_power,
+                        gain_db=gain_db,
+                        p1db_dbm=comp.get('p1db_dbm', output_power + 20),
+                        is_compressed=False,
+                        compression_db=0.0
+                    )
+                    power_points.append(power_point)
+                    current_power = output_power
+
+                fig_power = plot_power_tracking(power_points, input_power, primary_rx['name'])
+                power_path = output_dir / "rf_chain_power.png"
+                fig_power.savefig(power_path, dpi=150, bbox_inches='tight')
+                plt.close(fig_power)
+                print(f"    Power tracking plot saved to: {power_path}")
+
+            # Generate cascade breakdown plot
+            print("  Generating cascade breakdown plot...")
+            fig_cascade = plot_cascade_breakdown(mid_freq_result, title=f"{primary_rx['name']} Cascade Analysis")
+            cascade_path = output_dir / "rf_chain_cascade.png"
+            fig_cascade.savefig(cascade_path, dpi=150, bbox_inches='tight')
+            plt.close(fig_cascade)
+            print(f"    Cascade breakdown plot saved to: {cascade_path}")
+
+        except Exception as e:
+            print(f"  Warning: Could not generate detailed RF chain plots: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Build config and results for PowerPoint
     rf_config = {
