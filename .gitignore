@@ -6,3 +6,4 @@ __pycache__/
 
 # Output directories
 **/output/
+results/*.png
