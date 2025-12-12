@@ -707,7 +707,112 @@ def get_antenna_config():
     filepath = output_dir / "uav_coverage_analysis.png"
     fig.savefig(filepath, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"\nPlot saved to: {filepath}")
+    print(f"\nCombined plot saved to: {filepath}")
+
+    # Task 2.1: Generate individual band coverage plots
+    def save_band_coverage_plot(antennas, title, filename, freq_label):
+        """Generate and save coverage plot for specific antenna band."""
+        if not antennas:
+            print(f"  Skipping {title} - no antennas")
+            return None
+
+        # Create a modified config with only these antennas
+        from dataclasses import replace
+        band_config = replace(uav_config, rx_antennas=antennas, antennas=antennas)
+
+        # Run coverage analysis for this band
+        band_result = analyze_coverage(band_config)
+
+        # Generate plot
+        fig_band = plt.figure(figsize=(10, 8))
+        AZ_band, EL_band = np.meshgrid(band_result.azimuth, band_result.elevation)
+
+        # Create 2x2 subplot
+        gs = fig_band.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+        ax1 = fig_band.add_subplot(gs[0, :])  # Top: full width for coverage map
+        ax2 = fig_band.add_subplot(gs[1, 0])  # Bottom left: azimuth cut
+        ax3 = fig_band.add_subplot(gs[1, 1])  # Bottom right: elevation cut
+
+        # Coverage map
+        c = ax1.contourf(AZ_band, EL_band, band_result.coverage_db, levels=20, cmap='jet')
+        plt.colorbar(c, ax=ax1, label='Gain (dBi)')
+        ax1.set_xlabel('Azimuth (degrees)')
+        ax1.set_ylabel('Elevation (degrees)')
+        ax1.set_title(f'{title} - Coverage Map')
+        ax1.grid(True, alpha=0.3)
+        ax1.plot(0, 0, 'w*', markersize=15)
+
+        # Azimuth cut
+        el_idx = np.argmin(np.abs(band_result.elevation))
+        ax2.plot(band_result.azimuth, band_result.coverage_db[el_idx, :], 'b-', linewidth=2)
+        ax2.set_xlabel('Azimuth (degrees)')
+        ax2.set_ylabel('Gain (dBi)')
+        ax2.set_title('Azimuth Cut (El=0°)')
+        ax2.set_xlim([-180, 180])
+        ax2.grid(True, alpha=0.3)
+        ax2.axhline(band_result.max_gain_db - 3, color='r', linestyle='--', label='-3 dB', linewidth=1)
+        ax2.legend()
+
+        # Elevation cut
+        az_idx = np.argmin(np.abs(band_result.azimuth))
+        ax3.plot(band_result.elevation, band_result.coverage_db[:, az_idx], 'r-', linewidth=2)
+        ax3.set_xlabel('Elevation (degrees)')
+        ax3.set_ylabel('Gain (dBi)')
+        ax3.set_title('Elevation Cut (Az=0°)')
+        ax3.set_xlim([-90, 90])
+        ax3.grid(True, alpha=0.3)
+        ax3.axhline(band_result.max_gain_db - 3, color='b', linestyle='--', label='-3 dB', linewidth=1)
+        ax3.legend()
+
+        fig_band.suptitle(f'{title} ({freq_label})', fontsize=13, fontweight='bold')
+        fig_band.tight_layout()
+
+        band_path = output_dir / filename
+        fig_band.savefig(band_path, dpi=150, bbox_inches='tight')
+        plt.close(fig_band)
+        print(f"  {title} plot saved to: {band_path}")
+        return band_result
+
+    # Generate individual band plots
+    print("\nGenerating individual band coverage plots...")
+    save_band_coverage_plot(rx_2_18, "RX Coverage - Mid Band", "coverage_rx_mid.png", "2-18 GHz")
+    save_band_coverage_plot(rx_low, "RX Coverage - Low Band", "coverage_rx_low.png", "<2 GHz")
+    save_band_coverage_plot(tx_2_18, "TX Coverage - Mid Band", "coverage_tx_mid.png", "2-18 GHz")
+    save_band_coverage_plot(tx_low, "TX Coverage - Low Band", "coverage_tx_low.png", "<2 GHz")
+
+    # Generate comparison plot
+    print("\nGenerating multi-band comparison plot...")
+    fig_comp = plt.figure(figsize=(12, 10))
+    gs_comp = fig_comp.add_gridspec(2, 2, hspace=0.25, wspace=0.25)
+
+    comparison_data = [
+        (rx_2_18, "RX Mid Band (2-18 GHz)", 0, 0),
+        (rx_low, "RX Low Band (<2 GHz)", 0, 1),
+        (tx_2_18, "TX Mid Band (2-18 GHz)", 1, 0),
+        (tx_low, "TX Low Band (<2 GHz)", 1, 1),
+    ]
+
+    for antennas, label, row, col in comparison_data:
+        ax = fig_comp.add_subplot(gs_comp[row, col])
+        if antennas:
+            band_config = replace(uav_config, rx_antennas=antennas, antennas=antennas)
+            band_result = analyze_coverage(band_config)
+            AZ_c, EL_c = np.meshgrid(band_result.azimuth, band_result.elevation)
+            c = ax.contourf(AZ_c, EL_c, band_result.coverage_db, levels=15, cmap='jet')
+            plt.colorbar(c, ax=ax, label='Gain (dBi)')
+            ax.set_title(f'{label}\nPeak: {band_result.max_gain_db:.1f} dBi')
+        else:
+            ax.text(0.5, 0.5, 'No antennas', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title(label)
+        ax.set_xlabel('Azimuth (°)')
+        ax.set_ylabel('Elevation (°)')
+        ax.grid(True, alpha=0.3)
+
+    fig_comp.suptitle('Multi-Band Coverage Comparison', fontsize=14, fontweight='bold')
+    comp_path = output_dir / "coverage_comparison.png"
+    fig_comp.savefig(comp_path, dpi=150, bbox_inches='tight')
+    plt.close(fig_comp)
+    print(f"  Comparison plot saved to: {comp_path}")
 
     # Build RX antenna list
     rx_antennas_list = [
