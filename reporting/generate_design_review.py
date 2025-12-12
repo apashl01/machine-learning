@@ -1220,6 +1220,18 @@ def main():
 
     # Get configs from shared system (these don't run separate analyses)
     rf_config, rf_results = get_rf_chain_config()
+
+    # Task 1: Generate RF chain schematics using schemdraw
+    try:
+        from rf_chain_analysis.visualization.schematic_generator import generate_all_schematics
+        print_header("RF CHAIN SCHEMATICS")
+        generate_all_schematics()
+    except ImportError:
+        print("\nNote: schemdraw not installed - skipping RF chain schematics")
+        print("      Install with: pip install schemdraw")
+    except Exception as e:
+        print(f"\nWarning: Could not generate RF chain schematics: {e}")
+
     adc_config, adc_results = get_adc_config()
     ant_config, ant_results = get_antenna_config()
 
