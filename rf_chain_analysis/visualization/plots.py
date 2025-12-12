@@ -36,7 +36,7 @@ def _setup_style():
 # CASCADE BREAKDOWN PLOTS
 # =============================================================================
 
-def plot_cascade_breakdown(result: CascadeResult,
+def plot_cascade_breakdown(result: 'CascadeResult',
                            title: Optional[str] = None) -> Figure:
     """
     Plot component-by-component cascade breakdown.
@@ -125,7 +125,7 @@ def plot_cascade_breakdown(result: CascadeResult,
 # FREQUENCY RESPONSE PLOTS
 # =============================================================================
 
-def plot_frequency_response(analysis: FrequencyAnalysis,
+def plot_frequency_response(analysis: 'FrequencyAnalysis',
                             chain_name: str = "RF Chain") -> Figure:
     """
     Plot gain, NF, and sensitivity vs frequency.
@@ -192,7 +192,7 @@ def plot_frequency_response(analysis: FrequencyAnalysis,
 # POWER TRACKING PLOTS
 # =============================================================================
 
-def plot_power_tracking(power_points: List[PowerPoint],
+def plot_power_tracking(power_points: List['PowerPoint'],
                         input_power_dbm: float,
                         chain_name: str = "RF Chain") -> Figure:
     """
@@ -249,7 +249,7 @@ def plot_power_tracking(power_points: List[PowerPoint],
 # CHAIN COMPARISON PLOTS
 # =============================================================================
 
-def plot_chain_comparison(results: Dict[str, CascadeResult],
+def plot_chain_comparison(results: Dict[str, 'CascadeResult'],
                           freq_ghz: float) -> Figure:
     """
     Compare multiple chains side-by-side.
@@ -327,7 +327,7 @@ def plot_chain_comparison(results: Dict[str, CascadeResult],
 # DYNAMIC RANGE VISUALIZATION
 # =============================================================================
 
-def plot_dynamic_range(result: CascadeResult, chain_name: str = "RF Chain") -> Figure:
+def plot_dynamic_range(result: 'CascadeResult', chain_name: str = "RF Chain") -> Figure:
     """
     Visualize dynamic range as a level diagram.
 
