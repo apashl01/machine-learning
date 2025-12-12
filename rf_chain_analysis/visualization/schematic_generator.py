@@ -20,15 +20,15 @@ except ImportError:
 # Component type to schemdraw element mapping
 COMPONENT_MAP = {
     'antenna': 'Antenna',
-    'amplifier': 'Amp',
+    'amplifier': 'Opamp',
     'attenuator': 'Resistor',
-    'filter': 'Box',
+    'filter': 'RBox',
     'switch': 'Switch',
     'cable': 'Line',
     'coax': 'Line',
-    'bandpass': 'Box',
-    'lowpass': 'Box',
-    'highpass': 'Box',
+    'bandpass': 'RBox',
+    'lowpass': 'RBox',
+    'highpass': 'RBox',
 }
 
 
@@ -59,11 +59,11 @@ def create_schematic_element(comp_name: str, comp_type: str):
         # Use a simple antenna symbol (triangle)
         return elm.Antenna()
     elif comp_type == 'amplifier':
-        return elm.Amp().label(comp_name)
+        return elm.Opamp().label(comp_name)
     elif comp_type in ['attenuator', 'atten']:
         return elm.Resistor().label(comp_name)
     elif comp_type in ['filter', 'bandpass', 'lowpass', 'highpass']:
-        return elm.Box(w=1.5, h=1).label(comp_name)
+        return elm.RBox(w=1.5, h=1).label(comp_name)
     elif comp_type == 'switch':
         return elm.Switch().label(comp_name)
     elif comp_type in ['cable', 'coax']:
@@ -71,7 +71,7 @@ def create_schematic_element(comp_name: str, comp_type: str):
         return elm.Line().label(comp_name, loc='top')
     else:
         # Default: labeled box
-        return elm.Box(w=1.5, h=1).label(comp_name)
+        return elm.RBox(w=1.5, h=1).label(comp_name)
 
 
 def generate_chain_schematic(archetype_name: str, archetype_data: Dict,
@@ -127,7 +127,7 @@ def generate_chain_schematic(archetype_name: str, archetype_data: Dict,
                 print(f"    Warning: Could not add {comp_name}: {e}")
                 # Add a simple box as fallback
                 d += elm.Line().right(0.5)
-                d += elm.Box(w=1.5, h=1).label(comp_name)
+                d += elm.RBox(w=1.5, h=1).label(comp_name)
 
         # Add title at top
         # Note: schemdraw doesn't have a built-in title, so we'll add it as text annotation
