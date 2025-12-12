@@ -136,9 +136,60 @@ def generate_plots(results):
     # Save plot
     output_dir = Path(__file__).parent / "output"
     output_dir.mkdir(exist_ok=True)
+
+    # Save combined plot
     filepath = output_dir / "interferometer_analysis.png"
     fig.savefig(filepath, dpi=150, bbox_inches='tight')
-    print(f"\nPlot saved to: {filepath}")
+    print(f"\nCombined plot saved to: {filepath}")
+
+    # Task 2.4: Save individual subplots for PowerPoint slides
+    # Save each subplot as a separate file for the reporting generator
+    individual_plots = [
+        (ax1, 'df_angle_error.png', 'Angle Accuracy vs Incident Angle'),
+        (ax2, 'df_incident_angle.png', 'SNR vs Incident Angle'),
+        (ax3, 'df_ambiguity.png', 'Ambiguity-Free Region'),
+    ]
+
+    for ax, filename, title in individual_plots:
+        # Create a new figure for this subplot
+        fig_single = plt.figure(figsize=(8, 6))
+        ax_single = fig_single.add_subplot(111)
+
+        # Copy the subplot content
+        for line in ax.get_lines():
+            ax_single.plot(line.get_xdata(), line.get_ydata(),
+                          linestyle=line.get_linestyle(),
+                          linewidth=line.get_linewidth(),
+                          color=line.get_color(),
+                          marker=line.get_marker(),
+                          markersize=line.get_markersize(),
+                          label=line.get_label() if line.get_label()[0] != '_' else None,
+                          alpha=line.get_alpha())
+
+        # Copy axis properties
+        ax_single.set_xlabel(ax.get_xlabel())
+        ax_single.set_ylabel(ax.get_ylabel())
+        ax_single.set_title(ax.get_title())
+        ax_single.set_xlim(ax.get_xlim())
+        ax_single.set_ylim(ax.get_ylim())
+        ax_single.grid(ax.get_xgridlines()[0].get_visible() if ax.get_xgridlines() else True, alpha=0.3)
+
+        # Copy scale (log/linear)
+        if ax.get_yscale() == 'log':
+            ax_single.set_yscale('log')
+        if ax.get_xscale() == 'log':
+            ax_single.set_xscale('log')
+
+        # Add legend if original had one
+        if ax.get_legend():
+            ax_single.legend(loc=ax.get_legend()._loc)
+
+        # Save individual plot
+        fig_single.tight_layout()
+        individual_path = output_dir / filename
+        fig_single.savefig(individual_path, dpi=150, bbox_inches='tight')
+        print(f"Individual plot saved to: {individual_path}")
+        plt.close(fig_single)
 
     try:
         plt.show()
