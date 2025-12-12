@@ -144,10 +144,19 @@ def add_rf_chain_slides(gen: DesignReviewGenerator,
 
         # System RF Architecture
         # Display single comprehensive architecture diagram
-        arch_diagram = output_path / "system_architecture.svg"
+        arch_diagram = output_path / "system_architecture.png"
         if arch_diagram.exists():
             gen.add_content_slide(
                 "System RF Architecture",
                 image_path=str(arch_diagram),
                 image_width=10.0
             )
+        else:
+            # Fallback to SVG if PNG not available
+            arch_diagram_svg = output_path / "system_architecture.svg"
+            if arch_diagram_svg.exists():
+                gen.add_content_slide(
+                    "System RF Architecture",
+                    image_path=str(arch_diagram_svg),
+                    image_width=10.0
+                )

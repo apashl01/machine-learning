@@ -8,6 +8,8 @@ architecture with all RX and TX paths connected to a central transceiver unit.
 from pathlib import Path
 from typing import Dict, List, Any
 import yaml
+import subprocess
+import os
 
 try:
     import schemdraw
@@ -16,6 +18,63 @@ try:
 except ImportError:
     SCHEMDRAW_AVAILABLE = False
     print("Warning: schemdraw not installed. Install with: pip install schemdraw")
+
+# Check for SVG to PNG conversion tools
+SVG_CONVERTER = None
+try:
+    import cairosvg
+    SVG_CONVERTER = 'cairosvg'
+except ImportError:
+    # Check if Inkscape is available in PATH
+    if os.system('inkscape --version > /dev/null 2>&1') == 0:
+        SVG_CONVERTER = 'inkscape'
+    # Check if rsvg-convert is available
+    elif os.system('rsvg-convert --version > /dev/null 2>&1') == 0:
+        SVG_CONVERTER = 'rsvg-convert'
+
+
+def convert_svg_to_png(svg_path: Path, png_path: Path, dpi: int = 150) -> bool:
+    """
+    Convert SVG to PNG using available converter.
+
+    Returns True if successful, False otherwise.
+    """
+    if SVG_CONVERTER == 'cairosvg':
+        try:
+            cairosvg.svg2png(url=str(svg_path), write_to=str(png_path), dpi=dpi)
+            return True
+        except Exception as e:
+            print(f"  cairosvg conversion failed: {e}")
+            return False
+
+    elif SVG_CONVERTER == 'inkscape':
+        try:
+            result = subprocess.run(
+                ['inkscape', '--export-type=png', f'--export-dpi={dpi}',
+                 f'--export-filename={png_path}', str(svg_path)],
+                capture_output=True, text=True, timeout=30
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"  Inkscape conversion failed: {e}")
+            return False
+
+    elif SVG_CONVERTER == 'rsvg-convert':
+        try:
+            result = subprocess.run(
+                ['rsvg-convert', f'--dpi-x={dpi}', f'--dpi-y={dpi}',
+                 '-o', str(png_path), str(svg_path)],
+                capture_output=True, text=True, timeout=30
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"  rsvg-convert conversion failed: {e}")
+            return False
+
+    else:
+        print("  No SVG to PNG converter available")
+        print("  Install one of: cairosvg (pip install cairosvg), inkscape, or librsvg")
+        return False
 
 
 def load_system_config(config_path: Path = None) -> Dict:
@@ -252,11 +311,21 @@ def generate_system_architecture(output_dir: Path = None):
     # Save diagram
     # =========================================================================
 
-    output_path = output_dir / "system_architecture.svg"
-    d.save(str(output_path))
-    print(f"  System architecture diagram saved to: {output_path}")
+    # Save as SVG first
+    svg_path = output_dir / "system_architecture.svg"
+    d.save(str(svg_path))
+    print(f"  System architecture diagram (SVG) saved to: {svg_path}")
 
-    return output_path
+    # Convert to PNG for PowerPoint compatibility
+    png_path = output_dir / "system_architecture.png"
+    print(f"  Converting to PNG for PowerPoint...")
+
+    if convert_svg_to_png(svg_path, png_path, dpi=150):
+        print(f"  System architecture diagram (PNG) saved to: {png_path}")
+        return png_path
+    else:
+        print(f"  Warning: PNG conversion failed, PowerPoint may not be able to use SVG")
+        return svg_path
 
 
 def generate_all_schematics(output_dir: Path = None):
