@@ -116,24 +116,6 @@ def add_jamming_slides(gen: DesignReviewGenerator,
     ]
     gen.add_content_slide("Self-Protect Jamming Physics", bullets=physics_bullets)
 
-    # J/S analysis at key ranges
-    headers = ["Range (km)", "J/S (dB)", "Effectiveness"]
-    rows = []
-    for r_km in [20, 50, 100, 150, 200]:
-        result = analyzer.analyze(r_km * 1000, 0)
-        js = result.js_ratio_db
-        if js > 20:
-            eff = "Excellent"
-        elif js > 10:
-            eff = "Good"
-        elif js > 0:
-            eff = "Marginal"
-        else:
-            eff = "Ineffective"
-        rows.append([f"{r_km}", f"{js:.1f}", eff])
-
-    gen.add_table_slide("J/S Ratio vs Range (On-Boresight)", headers=headers, rows=rows)
-
     # J/S vs Platform RCS table
     headers_rcs = ["Platform RCS (m²)", "RCS (dBsm)", "J/S at 50km (dB)", "J/S at 100km (dB)"]
     rows_rcs = []
