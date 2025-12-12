@@ -317,9 +317,15 @@ def load_from_system_config() -> MeasurementConfig:
 
     adc_data = sys_data.get('adc', {})
 
+    # Calculate timing resolution from detection bandwidth
+    # Resolution is the sample period of the channelized output
+    # For 20 MHz bandwidth: 1/20e6 = 50 ns
+    timing_resolution_ns = 1000.0 / channel_bw_mhz  # MHz to ns
+
     return MeasurementConfig(
         adc_sample_rate_gsps=adc_data.get('sample_rate_gsps', 40.0),
         channel_bandwidth_mhz=channel_bw_mhz,
+        timing_resolution_ns=timing_resolution_ns,
         dlfd_delay_ns=50.0,  # 50 ns delay line
     )
 
