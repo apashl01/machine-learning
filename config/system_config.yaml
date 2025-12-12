@@ -180,6 +180,7 @@ rf_chains:
 interferometer:
   # Array configuration
   n_elements: 4
+  freq_range_ghz: [2.0, 18.0]     # Task 3: Operating frequency range (not 0.5-18)
   c_light_in_per_ns: 11.8028      # Speed of light (inches/nanosecond)
 
   # Element positions (inches) - Vernier spacing

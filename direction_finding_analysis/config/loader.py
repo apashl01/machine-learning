@@ -147,9 +147,9 @@ def load_from_system_config(
         bandwidth_hz=bandwidth_hz
     )
 
-    # Build test frequencies across the system frequency range
-    freq_min = sys_config.freq_min_ghz
-    freq_max = sys_config.freq_max_ghz
+    # Build test frequencies across the interferometer's specific frequency range (Task 3)
+    freq_min = sys_config.interferometer.freq_min_ghz
+    freq_max = sys_config.interferometer.freq_max_ghz
     test_freqs = [freq_min]
     test_freqs.extend([f for f in [5, 10, 15] if freq_min < f < freq_max])
     test_freqs.append(freq_max)

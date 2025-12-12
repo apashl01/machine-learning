@@ -121,11 +121,22 @@ class InterferometerMounting:
 class InterferometerConfig:
     """Interferometer configuration - single source of truth."""
     n_elements: int
+    freq_range_ghz: Tuple[float, float]  # Task 3: [min, max] operating frequency
     c_light_in_per_ns: float
     element_positions: np.ndarray  # inches
     phase_error_high_snr_deg: float
     max_incident_angle_deg: float
     mounting: InterferometerMounting
+
+    @property
+    def freq_min_ghz(self) -> float:
+        """Minimum operating frequency (GHz)."""
+        return self.freq_range_ghz[0]
+
+    @property
+    def freq_max_ghz(self) -> float:
+        """Maximum operating frequency (GHz)."""
+        return self.freq_range_ghz[1]
 
     @property
     def baselines(self) -> np.ndarray:
@@ -318,6 +329,7 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
 
     interferometer = InterferometerConfig(
         n_elements=int(interf_data['n_elements']),
+        freq_range_ghz=tuple(interf_data['freq_range_ghz']),  # Task 3
         c_light_in_per_ns=float(interf_data['c_light_in_per_ns']),
         element_positions=np.array(interf_data['element_positions']),
         phase_error_high_snr_deg=float(interf_data['phase_error_high_snr_deg']),
