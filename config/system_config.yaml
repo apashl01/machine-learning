@@ -60,6 +60,9 @@ environment:
 # =============================================================================
 # RF CHAIN CONFIGURATION
 # =============================================================================
+# NOTE: Cables use parametric modeling - specify cable type (from component_specs.yaml)
+# and length_ft. Loader calculates loss dynamically: Total Loss = loss_per_ft * length_ft
+# Noise Figure for cables is automatically set equal to loss (passive component).
 rf_chains:
   # -------------------------------------------------------------------------
   # RECEIVE PATHS
@@ -82,9 +85,9 @@ rf_chains:
           gain_db: 25.0
           noise_figure_db: 1.5
         - name: "Cable"
-          type: "coax"
-          gain_db: -2.0
-          noise_figure_db: 2.0
+          type: "rg316"  # Cable type from component_specs.yaml
+          length_ft: 3.28  # 1 meter
+          # Loss and NF calculated dynamically from type + length
         - name: "Filter"
           type: "bandpass"
           gain_db: -1.5
@@ -107,9 +110,9 @@ rf_chains:
           gain_db: 20.0
           noise_figure_db: 2.0
         - name: "Cable"
-          type: "coax"
-          gain_db: -1.0
-          noise_figure_db: 1.0
+          type: "rg316"  # Cable type from component_specs.yaml
+          length_ft: 1.64  # 0.5 meter
+          # Loss and NF calculated dynamically from type + length
 
   # -------------------------------------------------------------------------
   # TRANSMIT PATHS
@@ -127,8 +130,9 @@ rf_chains:
           gain_db: 20.0
           psat_dbm: 20
         - name: "Cable"
-          type: "coax"
-          gain_db: -2.0
+          type: "rg316"  # Cable type from component_specs.yaml
+          length_ft: 3.28  # 1 meter
+          # Loss and NF calculated dynamically from type + length
         - name: "PA"
           type: "amplifier"
           gain_db: 25.0
@@ -150,8 +154,9 @@ rf_chains:
           gain_db: 25.0
           psat_dbm: 25
         - name: "Cable"
-          type: "coax"
-          gain_db: -1.5
+          type: "rg316"  # Cable type from component_specs.yaml
+          length_ft: 2.5  # ~0.75 meter
+          # Loss and NF calculated dynamically from type + length
         - name: "PA"
           type: "amplifier"
           gain_db: 10.0

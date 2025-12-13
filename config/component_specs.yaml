@@ -18,34 +18,36 @@ defaults:
 # Reusable component definitions that can be referenced in chains
 components:
 
-  # --- CABLES ---
-  rg316_1m:
+  # --- CABLE TYPES (Parametric: loss per foot vs frequency) ---
+  rg316:
     type: cable
-    name: "RG316 Coax 1m"
-    # Loss follows sqrt(f) model: loss = k * sqrt(f_ghz)
-    loss_points:
+    name: "RG316 Coax"
+    description: "Flexible coax cable"
+    # Loss per foot at various frequencies
+    loss_per_ft:
       - freq_ghz: 1.0
-        loss_db: 0.5
+        loss_db_per_ft: 0.152
+      - freq_ghz: 6.0
+        loss_db_per_ft: 0.373
+      - freq_ghz: 12.0
+        loss_db_per_ft: 0.528
       - freq_ghz: 18.0
-        loss_db: 2.0
+        loss_db_per_ft: 0.610
 
-  rg316_0p5m:
+  semi_rigid:
     type: cable
-    name: "RG316 Coax 0.5m"
-    loss_points:
+    name: "Semi-Rigid Coax"
+    description: "Low-loss semi-rigid cable"
+    # Loss per foot at various frequencies
+    loss_per_ft:
       - freq_ghz: 1.0
-        loss_db: 0.25
+        loss_db_per_ft: 0.2
+      - freq_ghz: 6.0
+        loss_db_per_ft: 0.490
+      - freq_ghz: 12.0
+        loss_db_per_ft: 0.693
       - freq_ghz: 18.0
-        loss_db: 1.0
-
-  semi_rigid_6in:
-    type: cable
-    name: "Semi-Rigid 6in"
-    loss_points:
-      - freq_ghz: 1.0
-        loss_db: 0.1
-      - freq_ghz: 18.0
-        loss_db: 0.4
+        loss_db_per_ft: 0.8
 
   # --- AMPLIFIERS ---
   lna_high_gain:
