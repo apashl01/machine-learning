@@ -161,6 +161,15 @@ rf_chains:
           gain_db: -2.0
           beamwidth_deg: 360.0
 
+  # RF Chain Analysis Settings (migrated from component_specs.yaml)
+  analysis:
+    frequency_points: 200
+    temperature_k: 290.0
+    snr_required_db: 10.0
+    bandwidth_hz: 20.0e6
+    input_power_sweep_dbm: [-80, 0]
+    adc_damage_level_dbm: 10.0
+
 # =============================================================================
 # INTERFEROMETER CONFIGURATION (Single Source of Truth)
 # =============================================================================

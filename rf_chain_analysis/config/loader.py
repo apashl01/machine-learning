@@ -567,7 +567,7 @@ def load_rf_chain_library(filepath: Union[str, Path] = None) -> RFChainLibrary:
     This is the preferred method for loading RF chain configurations in Phase 2.
 
     Args:
-        filepath: Path to rf_chains.yaml. If None, uses default location.
+        filepath: Path to component_specs.yaml. If None, uses default location.
 
     Returns:
         RFChainLibrary with all definitions loaded.
@@ -575,11 +575,11 @@ def load_rf_chain_library(filepath: Union[str, Path] = None) -> RFChainLibrary:
     if filepath is None:
         # Task 1.0: Updated to use centralized config/ directory
         config_dir = Path(__file__).parent.parent.parent / "config"
-        filepath = config_dir / "rf_chains.yaml"
+        filepath = config_dir / "component_specs.yaml"
 
     filepath = Path(filepath)
     if not filepath.exists():
-        raise FileNotFoundError(f"RF chains library file not found: {filepath}")
+        raise FileNotFoundError(f"Component specs library file not found: {filepath}")
 
     with open(filepath, 'r') as f:
         data = yaml.safe_load(f) or {}
