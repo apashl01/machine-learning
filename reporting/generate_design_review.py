@@ -245,15 +245,17 @@ def run_esm_analysis():
     print_header("ESM DETECTION ANALYSIS")
 
     from esm_analysis.config import (
-        load_config,
+        load_from_central_config,
         load_receiver_from_system_config,
         get_system_sensitivity_dbm
     )
+    from esm_analysis.config.loader import load_threat_library
     from esm_analysis.core import SNRCalculator, ThreatCategorizer
     from esm_analysis.visualization import ESMPlotter
 
-    # Load threat library (local)
-    system_config, threat_library = load_config()
+    # Load configuration from central config (Task 8)
+    system_config = load_from_central_config()
+    threat_library = load_threat_library()
 
     # Get sensitivity from shared config
     sensitivity = get_system_sensitivity_dbm(bandwidth_hz=20e6, snr_required_db=10.0)
@@ -768,7 +770,7 @@ def get_antenna_config():
     """Get antenna configuration and run coverage analysis."""
     print_header("ANTENNA COVERAGE ANALYSIS")
 
-    from antenna_coverage_analysis.config.loader import load_uav_config
+    from antenna_coverage_analysis.config.loader import load_from_system_config
     from antenna_coverage_analysis import analyze_coverage
     from pathlib import Path
     from dataclasses import replace
@@ -777,7 +779,8 @@ def get_antenna_config():
     import matplotlib.pyplot as plt
     import numpy as np
 
-    uav_config = load_uav_config()
+    # Load configuration from central config (Task 8)
+    uav_config = load_from_system_config()
 
     print(f"Using UAV antenna config:")
     print(f"  RX antennas: {uav_config.num_rx_antennas}")
