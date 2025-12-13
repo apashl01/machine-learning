@@ -200,6 +200,12 @@ interferometer:
     offset_body_m: [0.0, 0.0, 1.5]  # [X forward, Y right, Z down]
     orientation_deg: [0.0, 0.0, 0.0]  # [Roll, Pitch, Yaw]
 
+  # Analysis parameters (migrated from interferometer_config.yaml)
+  analysis:
+    incident_angles_range: [-80, 80]  # Degrees off boresight
+    angle_step: 0.5  # Degree resolution for analysis
+    test_frequencies_ghz: [2, 5, 10, 15, 18]  # Test frequencies for analysis
+
 # =============================================================================
 # PLATFORM CONFIGURATION (Task 1.1: Consolidated from uav_config.yaml)
 # =============================================================================
