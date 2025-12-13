@@ -50,15 +50,6 @@ adc:
   clock_jitter_fs: 100          # Clock jitter (fs RMS)
 
 # =============================================================================
-# PASSIVE COMPONENT SPECS (Task 1.1: Consolidated from adc_config.yaml)
-# =============================================================================
-passive_components:
-  cable_loss_db: 3.0
-  coupler_loss_db: 0.5
-  switch_loss_db: 1.0
-  filter_loss_db: 0.8
-
-# =============================================================================
 # ENVIRONMENT PARAMETERS (Task 1.1: Consolidated from esm_analysis config)
 # =============================================================================
 environment:
@@ -80,7 +71,6 @@ rf_chains:
       num_paths: 7
       freq_range_ghz: [2.0, 18.0]
       cascade_noise_figure_db: 3.5
-      total_gain_db: 30.0
       damage_threshold_dbm: 10
       components:
         - name: "Spiral Antenna"
@@ -106,7 +96,6 @@ rf_chains:
       num_paths: 1
       freq_range_ghz: [0.5, 2.0]
       cascade_noise_figure_db: 4.0
-      total_gain_db: 20.0
       damage_threshold_dbm: 15
       components:
         - name: "Wideband Antenna"
@@ -132,7 +121,6 @@ rf_chains:
       num_paths: 1
       freq_range_ghz: [2.0, 18.0]
       source_power_dbm: 0
-      total_gain_db: 45.0
       components:
         - name: "Driver Amp"
           type: "amplifier"
@@ -156,7 +144,6 @@ rf_chains:
       num_paths: 1
       freq_range_ghz: [0.5, 2.0]
       source_power_dbm: 0
-      total_gain_db: 30.0
       components:
         - name: "Driver Amp"
           type: "amplifier"
@@ -214,7 +201,7 @@ platform:
   speed_mps: 100      # Platform speed (m/s)
 
   # Radar cross section (for calculating threat radar detection range)
-  rcs_m2: 2.0         # Platform RCS (m²) - used for dynamic detection range requirement
+  rcs_m2: 0.5         # Platform RCS (m²) - used for dynamic detection range requirement
 
 # =============================================================================
 # ANTENNA CONFIGURATION (Task 1.1: Consolidated from uav_config.yaml)
@@ -237,7 +224,7 @@ antennas:
     # Nose antennas (2)
     - name: "Nose Left"
       position: [0.8, -0.15, 0.0]
-      orientation: [-45, 0]       # [azimuth, elevation] in degrees
+      orientation: [-70, 0]       # [azimuth, elevation] in degrees
       freq_band: "2-18 GHz"
       type: "spiral"
       peak_gain_dbi: 3.0
@@ -245,7 +232,7 @@ antennas:
 
     - name: "Nose Right"
       position: [0.8, 0.15, 0.0]
-      orientation: [45, 0]
+      orientation: [70, 0]
       freq_band: "2-18 GHz"
       type: "spiral"
       peak_gain_dbi: 3.0

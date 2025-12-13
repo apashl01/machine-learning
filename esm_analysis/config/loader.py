@@ -94,6 +94,7 @@ class PlatformConfig:
     name: str = "UAV Platform"
     altitude_m: float = 5000.0
     speed_mps: float = 100.0
+    rcs_m2: float = 2.0  # Platform RCS for dynamic detection range requirement
     antenna_positions: List[Dict] = field(default_factory=list)
 
 
@@ -390,6 +391,7 @@ def _parse_platform_config(data: dict) -> PlatformConfig:
         name=data.get('name', 'UAV Platform'),
         altitude_m=_to_float(data.get('altitude_m'), 5000.0),
         speed_mps=_to_float(data.get('speed_mps'), 100.0),
+        rcs_m2=_to_float(data.get('rcs_m2'), 2.0),
         antenna_positions=data.get('antenna_positions', [])
     )
 
