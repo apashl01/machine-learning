@@ -7,6 +7,7 @@ threat definitions, and analysis requirements.
 
 from .loader import (
     load_config,
+    load_from_central_config,
     load_receiver_from_system_config,
     get_system_sensitivity_dbm,
     compute_dynamic_pfa,
@@ -18,6 +19,7 @@ from .loader import (
 
 __all__ = [
     'load_config',
+    'load_from_central_config',
     'load_receiver_from_system_config',
     'get_system_sensitivity_dbm',
     'compute_dynamic_pfa',

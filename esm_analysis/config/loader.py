@@ -566,8 +566,8 @@ def load_from_central_config() -> SystemConfig:
     # Map central config to ESM SystemConfig structure
     # Receiver configuration
     receiver = ReceiverConfig(
-        freq_min_hz=central_config.freq_min_hz,
-        freq_max_hz=central_config.freq_max_hz,
+        freq_min_hz=central_config.freq_min_ghz * 1e9,
+        freq_max_hz=central_config.freq_max_ghz * 1e9,
         antenna=AntennaConfig(
             gain_dbi=central_config.antennas.esm_peak_gain_dbi,
             pattern_type=central_config.antennas.esm_type,
