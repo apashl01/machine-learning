@@ -118,6 +118,14 @@ class InterferometerMounting:
 
 
 @dataclass
+class InterferometerAnalysisConfig:
+    """Interferometer analysis parameters (Task 8)."""
+    incident_angles_range: List[float]  # [min, max] in degrees
+    angle_step: float                    # Angular resolution in degrees
+    test_frequencies_ghz: List[float]    # Test frequencies for analysis
+
+
+@dataclass
 class InterferometerConfig:
     """Interferometer configuration - single source of truth."""
     n_elements: int
@@ -127,6 +135,7 @@ class InterferometerConfig:
     phase_error_high_snr_deg: float
     max_incident_angle_deg: float
     mounting: InterferometerMounting
+    analysis: Optional['InterferometerAnalysisConfig'] = None  # Task 8: Analysis parameters
 
     @property
     def freq_min_ghz(self) -> float:
@@ -192,6 +201,14 @@ class PlatformConfig:
 
 
 @dataclass
+class AntennaAnalysisConfig:
+    """Antenna coverage analysis parameters (Task 8)."""
+    azimuth_range: List[float]      # [min, max] in degrees
+    elevation_range: List[float]    # [min, max] in degrees
+    angular_resolution: float        # Angular resolution in degrees
+
+
+@dataclass
 class AntennaConfig:
     """Antenna configuration (Task 1.1: Updated structure)."""
     esm_type: str
@@ -206,6 +223,52 @@ class AntennaConfig:
 
     # Legacy platform antennas (for backward compatibility)
     platform_antennas: List[PlatformAntenna] = field(default_factory=list)
+
+    # Analysis parameters (Task 8)
+    analysis: Optional['AntennaAnalysisConfig'] = None
+
+
+@dataclass
+class ReceiverConfig:
+    """ESM receiver configuration (Task 8)."""
+    tune_time_us: float         # Time to retune receiver (microseconds)
+    settling_time_us: float     # Settling time after tune (microseconds)
+
+
+@dataclass
+class EnvironmentConfig:
+    """Environmental parameters (Task 8)."""
+    temperature_k: float
+    propagation_model: str
+    include_atmospheric_loss: bool
+
+
+@dataclass
+class SidelobeConfig:
+    """Sidelobe level configuration (Task 8)."""
+    main_beam_offset_db: float
+    first_sidelobe_db: float
+    back_lobe_db: float
+
+
+@dataclass
+class ESMConfig:
+    """ESM analysis parameters (Task 8)."""
+    required_detection_range_m: float
+    sidelobe_levels: SidelobeConfig
+    default_scan_positions: int
+    dwell_margin_factor: float
+    sidelobe_check_interval_s: float
+
+
+@dataclass
+class OutputConfig:
+    """Output configuration (Task 8)."""
+    results_dir: str
+    save_csv: bool
+    save_json: bool
+    plot_format: str
+    plot_dpi: int
 
 
 @dataclass
@@ -222,6 +285,12 @@ class SystemConfig:
     interferometer: InterferometerConfig
     antennas: AntennaConfig
     platform: Optional[PlatformConfig] = None  # Task 1.1: Platform config
+
+    # Additional configurations (Task 8)
+    receiver: Optional[ReceiverConfig] = None
+    environment: Optional[EnvironmentConfig] = None
+    esm: Optional[ESMConfig] = None
+    output: Optional[OutputConfig] = None
 
     def print_summary(self):
         """Print configuration summary."""
@@ -328,6 +397,16 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
     interf_data = data['interferometer']
     mounting_data = interf_data['mounting']
 
+    # Parse interferometer analysis parameters (Task 8)
+    interf_analysis = None
+    if 'analysis' in interf_data:
+        analysis_data = interf_data['analysis']
+        interf_analysis = InterferometerAnalysisConfig(
+            incident_angles_range=analysis_data['incident_angles_range'],
+            angle_step=float(analysis_data['angle_step']),
+            test_frequencies_ghz=analysis_data['test_frequencies_ghz']
+        )
+
     interferometer = InterferometerConfig(
         n_elements=int(interf_data['n_elements']),
         freq_range_ghz=tuple(interf_data['freq_range_ghz']),  # Task 3
@@ -338,7 +417,8 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         mounting=InterferometerMounting(
             offset_body_m=np.array(mounting_data['offset_body_m']),
             orientation_deg=np.array(mounting_data['orientation_deg'])
-        )
+        ),
+        analysis=interf_analysis  # Task 8
     )
 
     # Parse antenna config (Task 1.1: Updated to support new flattened structure)
@@ -398,6 +478,16 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
             peak_gain_dbi=float(pa_data['peak_gain_dbi'])
         ))
 
+    # Parse antenna analysis parameters (Task 8)
+    antenna_analysis = None
+    if 'analysis' in ant_data:
+        analysis_data = ant_data['analysis']
+        antenna_analysis = AntennaAnalysisConfig(
+            azimuth_range=analysis_data['azimuth_range'],
+            elevation_range=analysis_data['elevation_range'],
+            angular_resolution=float(analysis_data['angular_resolution'])
+        )
+
     antennas = AntennaConfig(
         esm_type=esm_type,
         esm_beamwidth_deg=esm_beamwidth,
@@ -406,7 +496,8 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         esm_front_to_back_db=esm_ftb,
         rx_antennas=rx_antennas,
         tx_antennas=tx_antennas,
-        platform_antennas=platform_antennas
+        platform_antennas=platform_antennas,
+        analysis=antenna_analysis  # Task 8
     )
 
     # Parse platform config (Task 1.1)
@@ -423,6 +514,55 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
             rcs_m2=float(plat_data.get('rcs_m2', 2.0))
         )
 
+    # Parse receiver config (Task 8)
+    receiver = None
+    if 'receiver' in data:
+        recv_data = data['receiver']
+        receiver = ReceiverConfig(
+            tune_time_us=float(recv_data['tune_time_us']),
+            settling_time_us=float(recv_data['settling_time_us'])
+        )
+
+    # Parse environment config (Task 8)
+    environment = None
+    if 'environment' in data:
+        env_data = data['environment']
+        environment = EnvironmentConfig(
+            temperature_k=float(env_data['temperature_k']),
+            propagation_model=env_data['propagation_model'],
+            include_atmospheric_loss=bool(env_data.get('include_atmospheric_loss', False))
+        )
+
+    # Parse ESM config (Task 8)
+    esm = None
+    if 'esm' in data:
+        esm_data = data['esm']
+        sidelobe_data = esm_data['sidelobe_levels']
+        sidelobe_cfg = SidelobeConfig(
+            main_beam_offset_db=float(sidelobe_data['main_beam_offset_db']),
+            first_sidelobe_db=float(sidelobe_data['first_sidelobe_db']),
+            back_lobe_db=float(sidelobe_data['back_lobe_db'])
+        )
+        esm = ESMConfig(
+            required_detection_range_m=float(esm_data['required_detection_range_m']),
+            sidelobe_levels=sidelobe_cfg,
+            default_scan_positions=int(esm_data['default_scan_positions']),
+            dwell_margin_factor=float(esm_data['dwell_margin_factor']),
+            sidelobe_check_interval_s=float(esm_data['sidelobe_check_interval_s'])
+        )
+
+    # Parse output config (Task 8)
+    output = None
+    if 'output' in data:
+        out_data = data['output']
+        output = OutputConfig(
+            results_dir=out_data['results_dir'],
+            save_csv=bool(out_data['save_csv']),
+            save_json=bool(out_data['save_json']),
+            plot_format=out_data['plot_format'],
+            plot_dpi=int(out_data['plot_dpi'])
+        )
+
     return SystemConfig(
         freq_min_ghz=float(freq['min_ghz']),
         freq_max_ghz=float(freq['max_ghz']),
@@ -431,5 +571,9 @@ def load_system_config(config_path: Optional[str] = None) -> SystemConfig:
         rf_chain=rf_chain,
         interferometer=interferometer,
         antennas=antennas,
-        platform=platform  # Task 1.1
+        platform=platform,  # Task 1.1
+        receiver=receiver,  # Task 8
+        environment=environment,  # Task 8
+        esm=esm,  # Task 8
+        output=output  # Task 8
     )
