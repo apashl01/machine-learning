@@ -248,52 +248,67 @@ def load_from_system_config(
     local_config_path: Union[str, Path] = None
 ) -> UAVCoverageConfig:
     """
-    Load antenna coverage config with system_config integration.
+    Load antenna coverage config from central system_config.yaml (Task 8).
 
-    Loads local uav_config.yaml for antenna positions and UAV geometry,
-    but uses system_config.yaml for ESM antenna parameters (gain, beamwidth).
+    Builds UAVCoverageConfig entirely from the central configuration,
+    no longer requiring local uav_config.yaml file.
 
     Args:
-        local_config_path: Path to local uav_config.yaml. If None, uses default.
+        local_config_path: Deprecated, kept for backward compatibility. Not used.
 
     Returns:
-        UAVCoverageConfig with system_config ESM parameters applied
+        UAVCoverageConfig with all parameters from central system_config.yaml
     """
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
     from system_config import load_system_config
 
-    # Load local config first (for antenna positions, UAV geometry)
-    local_config = load_uav_config(local_config_path)
-
-    # Load system config for ESM antenna parameters
+    # Load central system config (Task 8: single source of truth)
     sys_config = load_system_config()
     esm_ant = sys_config.antennas
 
-    # Update spiral antenna with system_config values
+    # Build spiral antenna spec from central config
     spiral_spec = SpiralAntennaSpec(
         beamwidth_deg=esm_ant.esm_beamwidth_deg,
         gain_dbi=esm_ant.esm_peak_gain_dbi,
-        front_to_back_db=local_config.spiral_antenna.front_to_back_db
+        front_to_back_db=esm_ant.esm_front_to_back_db
     )
 
-    # Update RX antennas with system_config ESM parameters
+    # Parse RX antennas from central config
     rx_antennas = []
-    for ant in local_config.rx_antennas:
-        # Only apply ESM params to spiral-type antennas in Mid Band
-        if ant.antenna_type == 'spiral' and '2-18' in ant.freq_band:
-            rx_antennas.append(AntennaSpec(
-                name=ant.name,
-                position=ant.position,
-                orientation=ant.orientation,
-                freq_band=ant.freq_band,
-                antenna_type=ant.antenna_type,
-                beamwidth_deg=esm_ant.esm_beamwidth_deg,
-                gain_dbi=esm_ant.esm_peak_gain_dbi
-            ))
-        else:
-            rx_antennas.append(ant)
+    for ant_data in sys_config.antennas.rx_antennas:
+        rx_antennas.append(AntennaSpec(
+            name=ant_data.name,
+            position=ant_data.position,
+            orientation=ant_data.orientation,
+            freq_band=ant_data.freq_band,
+            antenna_type=ant_data.antenna_type,
+            beamwidth_deg=ant_data.beamwidth_deg,
+            gain_dbi=ant_data.peak_gain_dbi
+        ))
+
+    # Parse TX antennas from central config
+    tx_antennas = []
+    horn_antenna = None
+    for ant_data in sys_config.antennas.tx_antennas:
+        tx_antennas.append(AntennaSpec(
+            name=ant_data.name,
+            position=ant_data.position,
+            orientation=ant_data.orientation,
+            freq_band=ant_data.freq_band,
+            antenna_type=ant_data.antenna_type,
+            beamwidth_deg=ant_data.beamwidth_deg,
+            gain_dbi=ant_data.peak_gain_dbi
+        ))
+        # Set horn antenna if it's a horn type
+        if ant_data.antenna_type == 'horn' and horn_antenna is None:
+            horn_antenna = HornAntennaSpec(
+                beamwidth_deg=ant_data.beamwidth_deg,
+                gain_dbi=ant_data.peak_gain_dbi,
+                position=ant_data.position,
+                orientation=ant_data.orientation
+            )
 
     # Use system frequency reference
     frequency_ghz = sys_config.freq_reference_ghz
@@ -301,15 +316,20 @@ def load_from_system_config(
     # Use analysis parameters from central config (Task 8)
     analysis_params = sys_config.antennas.analysis
 
+    # Get UAV geometry from platform config
+    platform = sys_config.platform
+    uav_length = platform.length_m if platform else 2.0
+    uav_width = platform.width_m if platform else 2.5
+
     return UAVCoverageConfig(
         frequency_ghz=frequency_ghz,
         spiral_antenna=spiral_spec,
-        horn_antenna=local_config.horn_antenna,
-        antennas=rx_antennas,  # Legacy field
+        horn_antenna=horn_antenna,
+        antennas=rx_antennas,  # Legacy field (copy of rx_antennas)
         rx_antennas=rx_antennas,
-        tx_antennas=local_config.tx_antennas,
-        uav_length=local_config.uav_length,
-        uav_width=local_config.uav_width,
+        tx_antennas=tx_antennas,
+        uav_length=uav_length,
+        uav_width=uav_width,
         azimuth_range=analysis_params.azimuth_range,
         elevation_range=analysis_params.elevation_range,
         angular_resolution=analysis_params.angular_resolution
