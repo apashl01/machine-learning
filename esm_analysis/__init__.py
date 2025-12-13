@@ -17,7 +17,7 @@ Modules:
 __version__ = "1.0.0"
 __author__ = "Andrew's Analysis Tools"
 
-from .config import load_config, SystemConfig, ThreatLibrary, compute_dynamic_pfa
+from .config import load_config, SystemConfig, ThreatLibrary, compute_dynamic_pfa, load_from_central_config
 from .core import (
     SNRCalculator,
     ThreatCategorizer,
@@ -44,6 +44,7 @@ from .spurious_analysis import (
 
 __all__ = [
     'load_config',
+    'load_from_central_config',
     'SystemConfig',
     'ThreatLibrary',
     'compute_dynamic_pfa',

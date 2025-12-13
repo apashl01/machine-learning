@@ -298,6 +298,9 @@ def load_from_system_config(
     # Use system frequency reference
     frequency_ghz = sys_config.freq_reference_ghz
 
+    # Use analysis parameters from central config (Task 8)
+    analysis_params = sys_config.antennas.analysis
+
     return UAVCoverageConfig(
         frequency_ghz=frequency_ghz,
         spiral_antenna=spiral_spec,
@@ -307,9 +310,9 @@ def load_from_system_config(
         tx_antennas=local_config.tx_antennas,
         uav_length=local_config.uav_length,
         uav_width=local_config.uav_width,
-        azimuth_range=local_config.azimuth_range,
-        elevation_range=local_config.elevation_range,
-        angular_resolution=local_config.angular_resolution
+        azimuth_range=analysis_params.azimuth_range,
+        elevation_range=analysis_params.elevation_range,
+        angular_resolution=analysis_params.angular_resolution
     )
 
 

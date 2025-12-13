@@ -545,6 +545,100 @@ def load_system_config(filepath: Union[str, Path] = None) -> SystemConfig:
     return _parse_system_config(data)
 
 
+def load_from_central_config() -> SystemConfig:
+    """
+    Load ESM configuration from central system_config.yaml (Task 8).
+
+    This function loads from the project-wide central configuration file
+    instead of the local esm_analysis/config/system_config.yaml.
+
+    Returns:
+        SystemConfig object with parameters from central config
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+    from system_config import load_system_config as load_central_config
+
+    # Load central config
+    central_config = load_central_config()
+
+    # Map central config to ESM SystemConfig structure
+    # Receiver configuration
+    receiver = ReceiverConfig(
+        freq_min_hz=central_config.freq_min_hz,
+        freq_max_hz=central_config.freq_max_hz,
+        antenna=AntennaConfig(
+            gain_dbi=central_config.antennas.esm_peak_gain_dbi,
+            pattern_type=central_config.antennas.esm_type,
+            azimuth_coverage_deg=360.0,  # Default for omnidirectional ESM
+            elevation_coverage_deg=120.0
+        ),
+        noise_figure_db=6.0,  # Default - would come from RF chain analysis
+        bandwidth_hz=20.0e6,  # Standard analysis bandwidth
+        instantaneous_bandwidth_ghz=1.0,
+        system_losses_db=3.0,  # Default
+        snr_threshold_db=10.0,  # Default
+        pfa=1e-6,
+        tune_time_us=central_config.receiver.tune_time_us,
+        settling_time_us=central_config.receiver.settling_time_us
+    )
+
+    # Platform configuration
+    platform = PlatformConfig(
+        name=central_config.platform.name,
+        altitude_m=central_config.platform.altitude_m,
+        speed_mps=central_config.platform.speed_mps,
+        rcs_m2=central_config.platform.rcs_m2,
+        antenna_positions=[]  # Would be populated from central_config.antennas if needed
+    )
+
+    # Environment configuration
+    environment = EnvironmentConfig(
+        temperature_k=central_config.environment.temperature_k,
+        propagation_model=central_config.environment.propagation_model,
+        include_atmospheric_loss=central_config.environment.include_atmospheric_loss
+    )
+
+    # Analysis configuration - now from central config ESM section
+    sidelobe_cfg = SidelobeConfig(
+        main_beam_offset_db=central_config.esm.sidelobe_levels.main_beam_offset_db,
+        first_sidelobe_db=central_config.esm.sidelobe_levels.first_sidelobe_db,
+        back_lobe_db=central_config.esm.sidelobe_levels.back_lobe_db
+    )
+
+    analysis = AnalysisConfig(
+        required_detection_range_m=central_config.esm.required_detection_range_m,
+        sidelobe_levels=sidelobe_cfg,
+        default_scan_positions=central_config.esm.default_scan_positions,
+        dwell_margin_factor=central_config.esm.dwell_margin_factor,
+        sidelobe_check_interval_s=central_config.esm.sidelobe_check_interval_s,
+        verbose=True,
+        debug_output=True,
+        generate_plots=True
+    )
+
+    # Output configuration - now from central config output section
+    output = OutputConfig(
+        results_dir=central_config.output.results_dir,
+        save_csv=central_config.output.save_csv,
+        save_json=central_config.output.save_json,
+        plot_format=central_config.output.plot_format,
+        plot_dpi=central_config.output.plot_dpi
+    )
+
+    return SystemConfig(
+        name="ESM Receiver System",
+        description="Loaded from central system_config.yaml",
+        version="1.0",
+        receiver=receiver,
+        platform=platform,
+        environment=environment,
+        analysis=analysis,
+        output=output
+    )
+
+
 def load_threat_library(filepath: Union[str, Path] = None) -> ThreatLibrary:
     """
     Load threat library from YAML file.

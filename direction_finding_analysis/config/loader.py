@@ -150,9 +150,9 @@ def load_from_system_config(
     # Build test frequencies across the interferometer's specific frequency range (Task 3)
     freq_min = sys_config.interferometer.freq_min_ghz
     freq_max = sys_config.interferometer.freq_max_ghz
-    test_freqs = [freq_min]
-    test_freqs.extend([f for f in [5, 10, 15] if freq_min < f < freq_max])
-    test_freqs.append(freq_max)
+
+    # Use analysis parameters from central config (Task 8)
+    analysis_params = sys_config.interferometer.analysis
 
     return InterferometerConfig(
         n_elements=sys_config.interferometer.n_elements,
@@ -162,10 +162,9 @@ def load_from_system_config(
         noise_floor_dbm=noise_result.system_noise_floor_dbm,
         c_light_in_per_ns=sys_config.interferometer.c_light_in_per_ns,
         element_positions=list(sys_config.interferometer.element_positions),
-        incident_angles_range=[-sys_config.interferometer.max_incident_angle_deg,
-                               sys_config.interferometer.max_incident_angle_deg],
-        angle_step=0.5,
-        test_frequencies_ghz=test_freqs,
+        incident_angles_range=analysis_params.incident_angles_range,
+        angle_step=analysis_params.angle_step,
+        test_frequencies_ghz=analysis_params.test_frequencies_ghz,
         antenna_pattern_file=None,
         antenna_pattern_freq_ghz=sys_config.freq_reference_ghz
     )
